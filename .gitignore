@@ -1,0 +1,6 @@
+music-downloader
+spotify_token.json
+downloads/
+config.json
+*.db
+*node_modules/
