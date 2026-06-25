@@ -4,3 +4,6 @@ downloads/
 config.json
 *.db
 *node_modules/
+*.exe
+music-downloader-linux
+dist/

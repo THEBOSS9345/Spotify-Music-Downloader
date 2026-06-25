@@ -26,6 +26,7 @@ import (
 func main() {
 
 	addr := "127.0.0.1:50811"
+
 	fmt.Println()
 	fmt.Println("  Music Downloader - THEBOSS9345")
 	fmt.Println("  " + strings.Repeat("-", 54))
@@ -50,13 +51,16 @@ func main() {
 	authServer := auth.NewSpotifyAuthServer(
 		cfg.Spotify.ClientId,
 		cfg.Spotify.ClientSecret,
-		"http://127.0.0.1:50811/api/auth",
+		fmt.Sprintf("http://%s/api/auth", addr),
 	)
 
 	database, err := db.New("music_downloader.db")
+
 	if err != nil {
-		log.Fatal("Failed to init database:", err)
+		logs.Error("Failed to initialize database: %v", err)
+		return
 	}
+
 	defer database.Close()
 
 	svc := spotifyservice.New()
@@ -65,7 +69,7 @@ func main() {
 
 	dl := ytdl.New(cfg.OutputDir)
 
-	handler := app.NewHandler(authServer, svc, dl, database)
+	handler := app.NewHandler(authServer, svc, dl, cfg)
 
 	authServer.OnAuth = func(client *spotify.Client, httpClient *http.Client, user domain.User) {
 		svc.SetClient(client, httpClient)
@@ -74,8 +78,10 @@ func main() {
 
 	distFS, err := ui.DistFS()
 	if err != nil {
-		log.Fatal("Failed to load embedded frontend:", err)
+		logs.Error("Failed to load embedded frontend: %v", err)
+		return
 	}
+
 	fileServer := http.FileServer(http.FS(distFS))
 
 	mux := http.NewServeMux()
@@ -99,11 +105,14 @@ func main() {
 
 	go func() {
 		client, httpClient, user, err := authServer.LoadToken(context.Background())
+
 		if err != nil {
 			logs.Info("No saved session, waiting for login")
 			return
 		}
+
 		svc.SetClient(client, httpClient)
+
 		if user != nil {
 			handler.SetUser(user)
 		}
@@ -123,6 +132,6 @@ func main() {
 	}()
 
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatal(err)
+		logs.Error("Server error: %v", err)
 	}
 }

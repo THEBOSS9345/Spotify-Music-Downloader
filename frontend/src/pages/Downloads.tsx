@@ -1,102 +1,148 @@
+import { useState, useCallback } from 'react'
 import { useDownloadState } from '../useDownloadState'
+import { api } from '../api'
+import { toast } from '../components/Toast'
 import type { Download } from '../types'
 
-const statusIcon: Record<string, string> = {
-  pending: '⏳',
-  searching: '🔍',
-  downloading: '⬇️',
-  converting: '🔄',
-  complete: '✅',
-  failed: '❌',
+const icon: Record<string, string> = {
+  pending: '⏳', searching: '🔍', downloading: '⬇️',
+  converting: '🔄', complete: '✅', failed: '❌',
 }
 
-const statusLabel: Record<string, string> = {
-  pending: 'Queued',
-  searching: 'Searching...',
-  downloading: 'Downloading...',
-  converting: 'Converting...',
-  complete: 'Done',
-  failed: 'Failed',
+const label: Record<string, string> = {
+  pending: 'Queued', searching: 'Searching...', downloading: 'Downloading...',
+  converting: 'Converting...', complete: 'Done', failed: 'Failed',
 }
+
+type Tab = 'all' | 'queued' | 'active' | 'complete' | 'failed'
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'queued', label: 'Queued' },
+  { key: 'active', label: 'Active' },
+  { key: 'complete', label: 'Complete' },
+  { key: 'failed', label: 'Failed' },
+]
 
 export function Downloads() {
   const { downloads, queue, active, queued } = useDownloadState()
+  const [tab, setTab] = useState<Tab>('all')
+
+  const handleRetry = useCallback(async (d: Download) => {
+    try {
+      await api.retry([d.id])
+      toast(`Retrying: ${d.song?.title}`, 'success')
+    } catch { toast('Retry failed', 'error') }
+  }, [])
 
   const completed = downloads.filter(d => d.status === 'complete')
   const failed = downloads.filter(d => d.status === 'failed')
   const activeItems = downloads.filter(d => ['searching', 'downloading', 'converting'].includes(d.status))
+  const pendingItems = downloads.filter(d => d.status === 'pending')
+  const hasAny = activeItems.length + queue.length + completed.length + failed.length > 0
+
+  const filteredDownloads = (() => {
+    switch (tab) {
+      case 'queued': return { items: pendingItems, queue: [...queue], showQueueTitle: false, showHistory: false, historyItems: [] as Download[] }
+      case 'active': return { items: activeItems, queue: [], showQueueTitle: false, showHistory: false, historyItems: [] as Download[] }
+      case 'complete': return { items: completed, queue: [], showQueueTitle: false, showHistory: false, historyItems: [] as Download[] }
+      case 'failed': return { items: failed, queue: [], showQueueTitle: false, showHistory: false, historyItems: [] as Download[] }
+      default: return {
+        items: activeItems, queue: [...queue], showQueueTitle: true,
+        showHistory: completed.length + failed.length > 0,
+        historyItems: [...completed, ...failed] as Download[],
+      }
+    }
+  })()
 
   return (
-    <div style={{ padding: 32, maxWidth: 860 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700 }}>Downloads</h1>
+    <div className="fade-in" style={{ padding: 28, maxWidth: 720 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>Downloads</h1>
         {(active > 0 || queued > 0) && (
           <span style={{
-            fontSize: 13, background: '#1DB954', color: '#000', padding: '2px 10px',
-            borderRadius: 500, fontWeight: 600,
+            fontSize: 11, background: 'var(--accent)', color: '#000', padding: '2px 10px',
+            borderRadius: 'var(--radius-full)', fontWeight: 600,
           }}>
             {active + queued} in progress
           </span>
         )}
       </div>
 
-      {(activeItems.length === 0 && queue.length === 0 && completed.length === 0 && failed.length === 0) ? (
-        <div style={{ textAlign: 'center', padding: '80px 0', color: '#727272' }}>
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginBottom: 16, opacity: 0.4 }}>
+      {/* Tabs */}
+      {hasAny && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--border)' }}>
+          {TABS.map(t => (
+            <button key={t.key} onClick={() => setTab(t.key)} className="row-hover" style={{
+              background: 'none', border: 'none', color: tab === t.key ? 'var(--text)' : 'var(--text-subdued)',
+              fontSize: 13, fontWeight: tab === t.key ? 600 : 400, cursor: 'pointer', padding: '8px 14px',
+              borderBottom: tab === t.key ? '2px solid var(--accent)' : '2px solid transparent',
+              marginBottom: -1, transition: 'color var(--transition), border-color var(--transition)',
+            }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!hasAny ? (
+        <div className="fade-in" style={{ textAlign: 'center', padding: '80px 0', color: 'var(--text-subdued)' }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginBottom: 14, opacity: 0.3 }}>
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
-          <p style={{ fontSize: 15 }}>No downloads yet</p>
-          <p style={{ fontSize: 13, marginTop: 6 }}>Open a playlist and start downloading</p>
+          <p style={{ fontSize: 14 }}>No downloads yet</p>
+          <p style={{ fontSize: 12, marginTop: 4, color: 'var(--text-subdued)' }}>Open a playlist and start downloading</p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-
-          {/* Active downloads */}
-          {activeItems.map(d => (
-            <DownloadRow key={d.id} d={d} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {/* Active / filtered items */}
+          {filteredDownloads.items.map((d, i) => (
+            <DownloadRow key={d.id} d={d} delay={i * 30} />
           ))}
 
-          {/* Queue section */}
-          {queue.length > 0 && (
+          {/* Queue */}
+          {filteredDownloads.queue.length > 0 && (
             <>
-              <div style={{
-                fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1.2,
-                color: '#727272', padding: '16px 4px 8px', borderTop: '1px solid #222', marginTop: 8,
-              }}>
-                Up Next ({queue.length})
-              </div>
-              {queue.map((q, i) => (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'center', gap: 14,
-                  padding: '12px 14px', background: '#181818', borderRadius: 8,
-                  opacity: 0.65,
+              {filteredDownloads.showQueueTitle && (
+                <div style={{
+                  fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1.2,
+                  color: 'var(--text-subdued)', padding: '14px 4px 6px', borderTop: '1px solid var(--border)', marginTop: 6,
                 }}>
-                  <span style={{ fontSize: 13, color: '#727272', minWidth: 20 }}>{i + 1}.</span>
-                  <span style={{ width: 28, height: 28, borderRadius: 4, background: '#282828', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>⏳</span>
+                  Up Next ({filteredDownloads.queue.length})
+                </div>
+              )}
+              {filteredDownloads.queue.map((q, i) => (
+                <div key={i} className="slide-up" style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '10px 14px', background: 'var(--bg)', borderRadius: 'var(--radius)',
+                  opacity: 0.5, animationDelay: `${i * 20}ms`,
+                }}>
+                  <span style={{ fontSize: 13, color: 'var(--text-subdued)', minWidth: 18, textAlign: 'right' }}>{i + 1}.</span>
+                  <span style={{ width: 24, height: 24, borderRadius: 4, background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>⏳</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{q.song.title}</div>
-                    <div style={{ fontSize: 11, color: '#727272' }}>{q.song.artist}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-subdued)' }}>{q.song.artist}</div>
                   </div>
                 </div>
               ))}
             </>
           )}
 
-          {/* Completed + Failed */}
-          {(completed.length > 0 || failed.length > 0) && (
+          {/* History */}
+          {filteredDownloads.showHistory && (
             <div style={{
-              fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1.2,
-              color: '#727272', padding: '16px 4px 8px', borderTop: '1px solid #222', marginTop: 8,
+              fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1.2,
+              color: 'var(--text-subdued)', padding: '14px 4px 6px', borderTop: '1px solid var(--border)', marginTop: 6,
             }}>
-              History ({completed.length + failed.length})
+              History ({filteredDownloads.historyItems.length})
             </div>
           )}
-          {completed.map(d => (
-            <DownloadRow key={d.id} d={d} dimmed />
+          {filteredDownloads.historyItems.filter(d => d.status === 'complete').map((d, i) => (
+            <DownloadRow key={d.id} d={d} dimmed delay={i * 20} />
           ))}
-          {failed.map(d => (
-            <DownloadRow key={d.id} d={d} dimmed />
+          {filteredDownloads.historyItems.filter(d => d.status === 'failed').map((d, i) => (
+            <DownloadRow key={d.id} d={d} dimmed delay={i * 20} onRetry={handleRetry} />
           ))}
         </div>
       )}
@@ -104,45 +150,56 @@ export function Downloads() {
   )
 }
 
-function DownloadRow({ d, dimmed }: { d: Download; dimmed?: boolean }) {
+function DownloadRow({ d, dimmed, onRetry, delay }: { d: Download; dimmed?: boolean; onRetry?: (d: Download) => void; delay?: number }) {
+  const active = ['pending', 'searching', 'downloading', 'converting'].includes(d.status)
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 14,
-      padding: '12px 14px', background: dimmed ? '#141414' : '#1e1e1e', borderRadius: 10,
-      transition: 'background 200ms ease',
+    <div onClick={() => d.status === 'failed' && onRetry?.(d)} className="slide-up" style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      padding: '10px 14px', background: dimmed ? 'var(--bg)' : 'var(--bg-surface)',
+      borderRadius: 'var(--radius)', cursor: d.status === 'failed' ? 'pointer' : undefined,
+      transition: 'background var(--transition), opacity var(--transition)',
+      opacity: active ? 1 : 0.65,
+      animationDelay: `${delay || 0}ms`,
+      border: d.status === 'failed' ? '1px solid rgba(233,20,41,0.15)' : '1px solid transparent',
     }}>
-      <span style={{ width: 28, height: 28, borderRadius: 4, background: '#282828', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>
-        {statusIcon[d.status] || '⏳'}
+      <span style={{
+        width: 24, height: 24, borderRadius: 4, background: 'var(--bg-hover)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12,
+        flexShrink: 0,
+      }}>
+        {icon[d.status] || '⏳'}
       </span>
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontWeight: 600, fontSize: 14, marginBottom: 2,
+          fontWeight: 500, fontSize: 13, marginBottom: 1,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          color: d.status === 'failed' ? '#e91429' : dimmed ? '#b3b3b3' : '#fff',
+          color: d.status === 'failed' ? 'var(--error)' : 'var(--text)',
+          transition: 'color var(--transition)',
         }}>
           {d.song?.title || ''}
         </div>
-        <div style={{ fontSize: 12, color: '#727272' }}>{d.song?.artist || ''}</div>
+        <div style={{ fontSize: 11, color: 'var(--text-subdued)' }}>{d.song?.artist || ''}</div>
       </div>
 
-      {['pending', 'searching', 'downloading', 'converting'].includes(d.status) && (
-        <div style={{ width: 160 }}>
-          <div style={{ height: 4, background: '#282828', borderRadius: 2, overflow: 'hidden' }}>
+      {active && (
+        <div style={{ width: 120 }}>
+          <div style={{ height: 3, background: 'var(--bg-hover)', borderRadius: 2, overflow: 'hidden' }}>
             <div style={{
-              height: '100%', width: `${Math.max(d.progress, 5)}%`,
-              background: d.status === 'failed' ? '#e91429' : '#1DB954',
-              borderRadius: 2, transition: 'width 0.4s ease',
+              height: '100%', width: `${Math.max(d.progress, 4)}%`,
+              background: 'var(--accent)', borderRadius: 2,
+              transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
             }} />
           </div>
         </div>
       )}
 
       <div style={{
-        fontSize: 12, fontWeight: 600, textAlign: 'right', minWidth: 80,
-        color: d.status === 'failed' ? '#e91429' : d.status === 'complete' ? '#1DB954' : '#b3b3b3',
+        fontSize: 11, fontWeight: 600, textAlign: 'right', minWidth: 64,
+        color: d.status === 'failed' ? 'var(--error)' : d.status === 'complete' ? 'var(--accent)' : 'var(--text-secondary)',
+        transition: 'color var(--transition)',
       }}>
-        {statusLabel[d.status] || d.status}
+        {label[d.status] || d.status}
       </div>
     </div>
   )

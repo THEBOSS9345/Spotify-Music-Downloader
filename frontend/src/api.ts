@@ -1,4 +1,4 @@
-import type { DownloadResponse, Playlist, Song, Status, User } from './types'
+import type { DownloadResponse, Playlist, Song, Status, User, ImportResult } from './types'
 
 async function getJSON<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -25,5 +25,9 @@ export const api = {
   downloads: () => getJSON<DownloadResponse>('/api/downloads'),
   login: () => getJSON<{ url: string }>('/api/login'),
   download: (songs: Song[]) => postJSON<{ batchId: string }>('/api/download', songs),
+  retry: (ids: string[]) => postJSON<{ ok: boolean }>('/api/retry', ids),
+  refreshPlaylists: () => postJSON<{ ok: boolean }>('/api/playlists/refresh'),
+  refreshPlaylistTracks: (id: string) => postJSON<{ ok: boolean }>(`/api/playlists/${id}/tracks/refresh`),
+  importPlaylist: (url: string) => postJSON<ImportResult>('/api/playlists/import', { url }),
   logout: () => postJSON<void>('/api/logout'),
 }

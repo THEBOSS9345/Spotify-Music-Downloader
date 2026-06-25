@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
+	"sync"
 	"time"
 
 	"music-downloader/src/db"
@@ -20,6 +22,9 @@ type Service struct {
 	client     *spotify.Client
 	httpClient *http.Client
 	db         *db.DB
+
+	anon   *anonClient
+	anonMu sync.Mutex
 }
 
 func New() *Service {
@@ -57,6 +62,13 @@ func (s *Service) GetPlaylists(ctx context.Context) ([]domain.Playlist, error) {
 	return s.fetchPlaylists(ctx)
 }
 
+func (s *Service) RefreshPlaylists(ctx context.Context) ([]domain.Playlist, error) {
+	if s.client == nil {
+		return nil, fmt.Errorf("spotify client not initialized")
+	}
+	return s.fetchPlaylists(ctx)
+}
+
 func (s *Service) refreshPlaylists() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -85,12 +97,14 @@ func (s *Service) fetchPlaylists(ctx context.Context) ([]domain.Playlist, error)
 			continue
 		}
 
+		ownerID := string(p.Owner.ID)
 		pl := domain.Playlist{
 			ID:          string(p.ID),
 			Name:        p.Name,
 			Description: p.Description,
 			TrackCount:  int(p.Tracks.Total),
 			Owner:       p.Owner.DisplayName,
+			OwnerID:     ownerID,
 		}
 		if len(p.Images) > 0 {
 			pl.ImageURL = p.Images[0].URL
@@ -99,7 +113,9 @@ func (s *Service) fetchPlaylists(ctx context.Context) ([]domain.Playlist, error)
 	}
 
 	if s.db != nil {
-		_ = s.db.CachePlaylists(result)
+		if err := s.db.CachePlaylists(result); err != nil {
+			logs.Error("failed to cache playlists: %v", err)
+		}
 	}
 
 	return result, nil
@@ -152,6 +168,86 @@ type rawSearchItem struct {
 	Artists  []rawArtist `json:"artists"`
 	Album    rawAlbum    `json:"album"`
 	Duration int         `json:"duration_ms"`
+}
+
+type rawPlaylistResponse struct {
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Images      []rawImage      `json:"images"`
+	Owner       rawPlaylistOwner `json:"owner"`
+	Tracks      struct {
+		Total int `json:"total"`
+	} `json:"tracks"`
+}
+
+type rawPlaylistOwner struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+}
+
+func ParsePlaylistID(input string) string {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return ""
+	}
+
+	if strings.HasPrefix(input, "spotify:playlist:") {
+		return strings.TrimPrefix(input, "spotify:playlist:")
+	}
+
+	if strings.Contains(input, "open.spotify.com/playlist/") {
+		parts := strings.Split(input, "/playlist/")
+		if len(parts) == 2 {
+			id := parts[1]
+			if idx := strings.Index(id, "?"); idx != -1 {
+				id = id[:idx]
+			}
+			return id
+		}
+	}
+
+	if strings.Contains(input, "/playlist/") {
+		parts := strings.Split(input, "/playlist/")
+		if len(parts) == 2 {
+			id := parts[1]
+			if idx := strings.Index(id, "?"); idx != -1 {
+				id = id[:idx]
+			}
+			return id
+		}
+	}
+
+	return input
+}
+
+func (s *Service) GetPlaylistByID(ctx context.Context, playlistID string) (*domain.Playlist, error) {
+	if s.httpClient != nil {
+		url := fmt.Sprintf("https://api.spotify.com/v1/playlists/%s", playlistID)
+		req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
+		resp, err := s.httpClient.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				var data rawPlaylistResponse
+				if err := json.NewDecoder(resp.Body).Decode(&data); err == nil {
+					pl := &domain.Playlist{
+						ID:          data.ID,
+						Name:        data.Name,
+						Description: data.Description,
+						TrackCount:  data.Tracks.Total,
+						Owner:       data.Owner.DisplayName,
+						OwnerID:     data.Owner.ID,
+					}
+					if len(data.Images) > 0 {
+						pl.ImageURL = data.Images[0].URL
+					}
+					return pl, nil
+				}
+			}
+		}
+	}
+	return s.fetchPlaylistAnon(ctx, playlistID)
 }
 
 func (s *Service) SearchTracks(ctx context.Context, query string) ([]domain.Song, error) {
@@ -218,6 +314,13 @@ func (s *Service) GetPlaylistTracks(ctx context.Context, playlistID string) ([]d
 	return s.fetchTracks(ctx, playlistID)
 }
 
+func (s *Service) RefreshPlaylistTracks(ctx context.Context, playlistID string) ([]domain.Song, error) {
+	if s.client == nil {
+		return nil, fmt.Errorf("spotify client not initialized")
+	}
+	return s.fetchTracks(ctx, playlistID)
+}
+
 func (s *Service) refreshTracks(playlistID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -228,6 +331,27 @@ func (s *Service) refreshTracks(playlistID string) {
 }
 
 func (s *Service) fetchTracks(ctx context.Context, playlistID string) ([]domain.Song, error) {
+	var result []domain.Song
+	var err error
+
+	if s.httpClient != nil {
+		result, err = s.fetchTracksOAuth(ctx, playlistID)
+	}
+
+	if err != nil || s.httpClient == nil {
+		result, err = s.fetchTracksAnon(ctx, playlistID)
+	}
+
+	if err == nil && s.db != nil {
+		if err := s.db.CacheTracks(playlistID, result); err != nil {
+			logs.Error("failed to cache tracks for %s: %v", playlistID, err)
+		}
+	}
+
+	return result, err
+}
+
+func (s *Service) fetchTracksOAuth(ctx context.Context, playlistID string) ([]domain.Song, error) {
 	url := fmt.Sprintf("https://api.spotify.com/v1/playlists/%s/items?limit=50", playlistID)
 
 	var result []domain.Song
@@ -280,7 +404,9 @@ func (s *Service) fetchTracks(ctx context.Context, playlistID string) ([]domain.
 	}
 
 	if s.db != nil {
-		_ = s.db.CacheTracks(playlistID, result)
+		if err := s.db.CacheTracks(playlistID, result); err != nil {
+			logs.Error("failed to cache tracks for %s: %v", playlistID, err)
+		}
 	}
 
 	return result, nil

@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  tag-and-release:
+    if: github.ref_type == 'branch' && github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.get-tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - id: get-tag
+        run: |
+          git fetch --tags origin
+          latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || echo "v0.0.0")
+          echo "latest=$latest"
+          IFS='.' read -r major minor patch <<< "${latest#v}"
+          newtag="v$((major+0)).$((minor+0)).$((patch+1))"
+          echo "tag=$newtag" >> $GITHUB_OUTPUT
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: true
+
+      - run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git tag ${{ steps.get-tag.outputs.tag }} ${{ github.sha }}
+          git push origin ${{ steps.get-tag.outputs.tag }}
+
+      - name: Build frontend
+        run: |
+          cd frontend && npm ci && npm run build
+          ls -la ../src/app/ui/dist/
+
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          args: release --clean --skip=before
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-from-tag:
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Build frontend
+        run: |
+          cd frontend && npm ci && npm run build
+          ls -la ../src/app/ui/dist/
+
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          args: release --clean --skip=before
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

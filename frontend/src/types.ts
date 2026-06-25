@@ -41,6 +41,11 @@ export interface DownloadResponse {
   queued: number
 }
 
+export interface ImportResult {
+  playlist: Playlist
+  songs: Song[]
+}
+
 export interface Status {
   authenticated: boolean
 }

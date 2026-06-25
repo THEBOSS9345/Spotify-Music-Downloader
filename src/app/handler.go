@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"music-downloader/src/auth"
-	"music-downloader/src/db"
 	"music-downloader/src/domain"
+	"music-downloader/src/infra/config"
 	"music-downloader/src/infra/logs"
 	"music-downloader/src/spotify"
 	"music-downloader/src/ytdl"
@@ -20,12 +20,13 @@ type Handler struct {
 	broker     *Broker
 }
 
-func NewHandler(auth *auth.SpotifyAuthServer, spotify *spotify.Service, ytdl *ytdl.Service, database *db.DB) *Handler {
+func NewHandler(auth *auth.SpotifyAuthServer, spotify *spotify.Service, ytdl *ytdl.Service, conf *config.Config) *Handler {
 	broker := NewBroker()
+
 	return &Handler{
 		auth:       auth,
 		spotify:    spotify,
-		downloader: NewDownloader(ytdl, database, broker),
+		downloader: NewDownloader(ytdl, broker, conf.MaxConcurrentDownloads),
 		broker:     broker,
 	}
 }
@@ -39,9 +40,13 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/login", h.handleLogin)
 	mux.HandleFunc("GET /api/user", h.handleUser)
 	mux.HandleFunc("GET /api/playlists", h.handlePlaylists)
+	mux.HandleFunc("POST /api/playlists/refresh", h.handlePlaylistsRefresh)
+	mux.HandleFunc("POST /api/playlists/import", h.handlePlaylistImport)
 	mux.HandleFunc("GET /api/playlists/{id}/tracks", h.handlePlaylistTracks)
+	mux.HandleFunc("POST /api/playlists/{id}/tracks/refresh", h.handlePlaylistTracksRefresh)
 	mux.HandleFunc("GET /api/search", h.handleSearch)
 	mux.HandleFunc("POST /api/download", h.handleDownload)
+	mux.HandleFunc("POST /api/retry", h.handleRetry)
 	mux.HandleFunc("GET /api/downloads", h.handleDownloads)
 	mux.HandleFunc("POST /api/logout", h.handleLogout)
 	mux.HandleFunc("GET /api/events", h.handleEvents)

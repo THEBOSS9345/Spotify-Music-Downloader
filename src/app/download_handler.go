@@ -7,6 +7,21 @@ import (
 	"music-downloader/src/domain"
 )
 
+func (h *Handler) handleRetry(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAuth(w, r) {
+		return
+	}
+
+	var ids []string
+	if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	h.downloader.Retry(ids)
+	h.json(w, map[string]bool{"ok": true})
+}
+
 func (h *Handler) handleDownload(w http.ResponseWriter, r *http.Request) {
 	if !h.requireAuth(w, r) {
 		return

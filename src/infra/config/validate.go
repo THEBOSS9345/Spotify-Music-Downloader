@@ -15,6 +15,10 @@ func Validate(config *Config) (*Config, error) {
 		config.OutputDir = "downloads"
 	}
 
+	if config.MaxConcurrentDownloads <= 0 {
+		config.MaxConcurrentDownloads = 3
+	}
+
 	_ = Write(config)
 
 	return config, nil
