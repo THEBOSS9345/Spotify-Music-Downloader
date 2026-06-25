@@ -20,12 +20,12 @@ import (
 )
 
 type SearchResult struct {
-	Title    string `json:"title"`
-	VideoID  string `json:"id"`
-	Duration int    `json:"duration"`
-	Thumbnai string `json:"thumbnail"`
-	Uploader string `json:"uploader"`
-	URL      string `json:"webpage_url"`
+	Title     string `json:"title"`
+	VideoID   string `json:"id"`
+	Duration  int    `json:"duration"`
+	Thumbnail string `json:"thumbnail"`
+	Uploader  string `json:"uploader"`
+	URL       string `json:"webpage_url"`
 }
 
 type Service struct {
@@ -46,7 +46,7 @@ func New(outputDir string) *Service {
 
 	return &Service{
 		outputDir: outputDir,
-		dl:          dl,
+		dl:        dl,
 	}
 }
 
@@ -80,12 +80,12 @@ func (s *Service) Search(ctx context.Context, query string) ([]SearchResult, err
 		}
 
 		results = append(results, SearchResult{
-			VideoID:  parts[0],
-			Title:    parts[1],
-			Duration: duration,
-			Thumbnai: parts[3],
-			Uploader: parts[4],
-			URL:      parts[5],
+			VideoID:   parts[0],
+			Title:     parts[1],
+			Duration:  duration,
+			Thumbnail: parts[3],
+			Uploader:  parts[4],
+			URL:       parts[5],
 		})
 	}
 
@@ -118,7 +118,7 @@ func (s *Service) Download(
 
 	onProgress(domain.DownloadDownloading, 55)
 
-	hasThumb := s.fetchThumbnail(result, filename)
+	hasThumb := s.fetchThumbnail(result, filename, song.AlbumArt)
 
 	onProgress(domain.DownloadDownloading, 70)
 
@@ -232,15 +232,24 @@ func (s *Service) downloadWithYtDlp(ctx context.Context, result SearchResult, fi
 	return nil
 }
 
-func (s *Service) fetchThumbnail(result SearchResult, filename string) bool {
+func (s *Service) fetchThumbnail(result SearchResult, filename string, spotifyArtURL string) bool {
 	thumbPath := filepath.Join(s.outputDir, filename+".jpg")
 
-	urls := []string{
-		fmt.Sprintf("https://img.youtube.com/vi/%s/maxresdefault.jpg", result.VideoID),
-		fmt.Sprintf("https://img.youtube.com/vi/%s/hqdefault.jpg", result.VideoID),
+	urls := make([]string, 0, 4)
+
+	if spotifyArtURL != "" {
+		urls = append(urls, spotifyArtURL)
 	}
-	if result.Thumbnai != "" && result.Thumbnai != "NA" {
-		urls = append(urls, result.Thumbnai)
+
+	if result.VideoID != "" {
+		urls = append(urls,
+			fmt.Sprintf("https://img.youtube.com/vi/%s/maxresdefault.jpg", result.VideoID),
+			fmt.Sprintf("https://img.youtube.com/vi/%s/hqdefault.jpg", result.VideoID),
+		)
+	}
+
+	if result.Thumbnail != "" && result.Thumbnail != "NA" {
+		urls = append(urls, result.Thumbnail)
 	}
 
 	for _, thumbURL := range urls {
