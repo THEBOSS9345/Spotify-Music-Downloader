@@ -150,8 +150,16 @@ export function Downloads() {
   )
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return ''
+  const mb = bytes / 1024 / 1024
+  return mb >= 1 ? `${mb.toFixed(1)} MB` : `${(bytes / 1024).toFixed(0)} KB`
+}
+
 function DownloadRow({ d, dimmed, onRetry, delay }: { d: Download; dimmed?: boolean; onRetry?: (d: Download) => void; delay?: number }) {
   const active = ['pending', 'searching', 'downloading', 'converting'].includes(d.status)
+  const hasBytes = d.downloadedBytes > 0 && d.totalBytes > 0
+  const pct = hasBytes ? Math.round(d.downloadedBytes / d.totalBytes * 100) : d.progress
   return (
     <div onClick={() => d.status === 'failed' && onRetry?.(d)} className="slide-up" style={{
       display: 'flex', alignItems: 'center', gap: 12,
@@ -182,25 +190,31 @@ function DownloadRow({ d, dimmed, onRetry, delay }: { d: Download; dimmed?: bool
         <div style={{ fontSize: 11, color: 'var(--text-subdued)' }}>{d.song?.artist || ''}</div>
       </div>
 
-      {active && (
-        <div style={{ width: 120 }}>
-          <div style={{ height: 3, background: 'var(--bg-hover)', borderRadius: 2, overflow: 'hidden' }}>
+      {(active && d.status !== 'pending') ? (
+        <div style={{ width: 140, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <div style={{ height: 6, background: 'var(--bg-hover)', borderRadius: 3, overflow: 'hidden' }}>
             <div style={{
-              height: '100%', width: `${Math.max(d.progress, 4)}%`,
-              background: 'var(--accent)', borderRadius: 2,
-              transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+              height: '100%', width: `${Math.max(pct, 2)}%`,
+              background: d.status === 'converting' ? 'var(--accent)' : 'var(--accent)',
+              borderRadius: 3,
+              transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
             }} />
           </div>
+          <div style={{ fontSize: 10, color: 'var(--text-subdued)', textAlign: 'right' }}>
+            {d.status === 'downloading' && hasBytes
+              ? `${formatBytes(d.downloadedBytes)} / ${formatBytes(d.totalBytes)}`
+              : `${pct}%`}
+          </div>
+        </div>
+      ) : (
+        <div style={{
+          fontSize: 11, fontWeight: 600, textAlign: 'right', minWidth: 64,
+          color: d.status === 'failed' ? 'var(--error)' : d.status === 'complete' ? 'var(--accent)' : 'var(--text-secondary)',
+          transition: 'color var(--transition)',
+        }}>
+          {label[d.status] || d.status}
         </div>
       )}
-
-      <div style={{
-        fontSize: 11, fontWeight: 600, textAlign: 'right', minWidth: 64,
-        color: d.status === 'failed' ? 'var(--error)' : d.status === 'complete' ? 'var(--accent)' : 'var(--text-secondary)',
-        transition: 'color var(--transition)',
-      }}>
-        {label[d.status] || d.status}
-      </div>
     </div>
   )
 }

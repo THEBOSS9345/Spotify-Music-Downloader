@@ -17,7 +17,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	svc := ytdl.New(cfg.OutputDir)
+	svc := ytdl.New(cfg.OutputDir, cfg.MaxDownloadThreads)
 
 	ctx := context.Background()
 
@@ -47,8 +47,8 @@ func main() {
 		Album:  "Test",
 	}
 
-	path, err := svc.Download(ctx, r, song, func(status domain.DownloadStatus, progress int) {
-		fmt.Printf("Progress: %s %d%%\n", status, progress)
+	path, err := svc.Download(ctx, r, song, func(p domain.DownloadProgress) {
+		fmt.Printf("Progress: %s %d%%\n", p.Status, p.Progress)
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "download: %v\n", err)

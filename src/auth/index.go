@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -21,6 +23,12 @@ type SpotifyAuthServer struct {
 	client        *spotify.Client
 	httpClient    *http.Client
 	OnAuth        func(client *spotify.Client, httpClient *http.Client, user domain.User)
+}
+
+func randomState() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 type SavedToken struct {
@@ -49,7 +57,7 @@ func NewSpotifyAuthServer(clientID, clientSecret, redirectURI string) *SpotifyAu
 
 	return &SpotifyAuthServer{
 		authenticator: authenticator,
-		state:         "dev-state",
+		state:         randomState(),
 		tokenFile:     "spotify_token.json",
 	}
 }

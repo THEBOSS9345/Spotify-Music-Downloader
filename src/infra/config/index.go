@@ -14,7 +14,9 @@ type SpotifyConfig struct {
 type Config struct {
 	Spotify                SpotifyConfig `json:"spotify"`
 	OutputDir              string        `json:"outputDir"`
-	MaxConcurrentDownloads int `json:"maxConcurrentDownloads"`
+	MaxConcurrentDownloads int           `json:"maxConcurrentDownloads"`
+	MaxDownloadThreads     int           `json:"maxDownloadThreads"`
+	Debug                  bool          `json:"debug"`
 }
 
 const DefaultOutputDir = "downloads"

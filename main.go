@@ -42,6 +42,8 @@ func main() {
 		log.Fatal(err)
 	}
 
+	logs.SetDebug(cfg.Debug)
+
 	fmt.Printf("  Downloads folder: %s\n", cfg.OutputDir)
 	fmt.Println()
 	fmt.Println("  Press Ctrl+C to stop")
@@ -67,7 +69,7 @@ func main() {
 
 	svc.SetDB(database)
 
-	dl := ytdl.New(cfg.OutputDir)
+	dl := ytdl.New(cfg.OutputDir, cfg.MaxDownloadThreads)
 
 	handler := app.NewHandler(authServer, svc, dl, cfg)
 

@@ -30,6 +30,8 @@ export interface Download {
   song: { title: string; artist: string; album: string }
   status: 'pending' | 'searching' | 'downloading' | 'converting' | 'complete' | 'failed'
   progress: number
+  downloadedBytes: number
+  totalBytes: number
   error: string
   createdAt?: number
 }

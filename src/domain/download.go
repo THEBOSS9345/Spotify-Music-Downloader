@@ -12,13 +12,22 @@ const (
 )
 
 type Download struct {
-	ID         string         `json:"id"`
-	Song       Song           `json:"song"`
-	Status     DownloadStatus `json:"status"`
-	Progress   int            `json:"progress"`
-	OutputPath string         `json:"outputPath"`
-	Error      string         `json:"error"`
-	CreatedAt  int64          `json:"createdAt"`
+	ID              string         `json:"id"`
+	Song            Song           `json:"song"`
+	Status          DownloadStatus `json:"status"`
+	Progress        int            `json:"progress"`
+	DownloadedBytes int64          `json:"downloadedBytes"`
+	TotalBytes      int64          `json:"totalBytes"`
+	OutputPath      string         `json:"outputPath"`
+	Error           string         `json:"error"`
+	CreatedAt       int64          `json:"createdAt"`
+}
+
+type DownloadProgress struct {
+	Status         DownloadStatus
+	Progress       int
+	DownloadedBytes int64
+	TotalBytes     int64
 }
 
 type User struct {

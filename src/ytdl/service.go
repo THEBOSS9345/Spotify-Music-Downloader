@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"music-downloader/src/domain"
@@ -35,12 +37,13 @@ type InstallPaths struct {
 }
 
 type Service struct {
-	outputDir    string
-	dl           *ytdlp.Command
-	installPaths InstallPaths
+	outputDir          string
+	dl                 *ytdlp.Command
+	installPaths       InstallPaths
+	maxDownloadThreads int
 }
 
-func New(outputDir string) *Service {
+func New(outputDir string, maxDownloadThreads int) *Service {
 	logs.Info("Checking and preparing media environments...")
 
 	installPaths, err := EnsureEnvironment()
@@ -60,9 +63,10 @@ func New(outputDir string) *Service {
 	}
 
 	return &Service{
-		outputDir:    outputDir,
-		dl:           dl,
-		installPaths: installPaths,
+		outputDir:          outputDir,
+		dl:                 dl,
+		installPaths:       installPaths,
+		maxDownloadThreads: maxDownloadThreads,
 	}
 }
 
@@ -141,10 +145,10 @@ func (s *Service) Download(
 	ctx context.Context,
 	result SearchResult,
 	song domain.Song,
-	onProgress func(domain.DownloadStatus, int),
+	onProgress func(domain.DownloadProgress),
 ) (string, error) {
 
-	onProgress(domain.DownloadDownloading, 10)
+	onProgress(domain.DownloadProgress{Status: domain.DownloadDownloading, Progress: 10})
 
 	safeArtist := safeFilename(song.Artist)
 	safeTitle := safeFilename(song.Title)
@@ -154,18 +158,18 @@ func (s *Service) Download(
 	os.Remove(filepath.Join(s.outputDir, filename+".mp3"))
 	os.Remove(filepath.Join(s.outputDir, filename+".jpg"))
 
-	onProgress(domain.DownloadDownloading, 25)
+	onProgress(domain.DownloadProgress{Status: domain.DownloadDownloading, Progress: 25})
 
 	if err := s.downloadWithYtDlp(ctx, result, filename, onProgress); err != nil {
 		logs.Error("yt-dlp download failed for %s: %v", song.Title, err)
 		return "", err
 	}
 
-	onProgress(domain.DownloadDownloading, 55)
+	onProgress(domain.DownloadProgress{Status: domain.DownloadDownloading, Progress: 55})
 
 	hasThumb := s.fetchThumbnail(result, filename, song.AlbumArt)
 
-	onProgress(domain.DownloadDownloading, 70)
+	onProgress(domain.DownloadProgress{Status: domain.DownloadDownloading, Progress: 70})
 
 	m4aPath := filepath.Join(s.outputDir, filename+".m4a")
 	mp3Path := filepath.Join(s.outputDir, filename+".mp3")
@@ -183,7 +187,7 @@ func (s *Service) Download(
 	os.Remove(m4aPath)
 	os.Remove(thumbPath)
 
-	onProgress(domain.DownloadComplete, 100)
+	onProgress(domain.DownloadProgress{Status: domain.DownloadComplete, Progress: 100})
 
 	logs.Success("Downloaded: %s -> %s", song.Title, mp3Path)
 	return mp3Path, nil
@@ -220,7 +224,59 @@ func buildFFmpegArgs(m4aPath, mp3Path, thumbPath string, hasThumb bool, song dom
 	return args
 }
 
-func (s *Service) downloadWithYtDlp(ctx context.Context, result SearchResult, filename string, onProgress func(domain.DownloadStatus, int)) error {
+func setFirefoxHeaders(req *http.Request) {
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0")
+	req.Header.Set("Accept", "video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "identity;q=1, *;q=0")
+	req.Header.Set("Referer", "https://www.youtube.com/")
+	req.Header.Set("Origin", "https://www.youtube.com")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Sec-Fetch-Dest", "video")
+	req.Header.Set("Sec-Fetch-Mode", "no-cors")
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	req.Header.Set("DNT", "1")
+}
+
+func (s *Service) downloadChunk(ctx context.Context, url string, f *os.File, start, end int64) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("chunk request: %w", err)
+	}
+	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
+	setFirefoxHeaders(req)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("chunk request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("chunk unexpected status: %s", resp.Status)
+	}
+
+	buf := make([]byte, 256*1024)
+	offset := start
+	for {
+		n, rerr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, werr := f.WriteAt(buf[:n], offset); werr != nil {
+				return fmt.Errorf("chunk write: %w", werr)
+			}
+			offset += int64(n)
+		}
+		if rerr == io.EOF {
+			break
+		}
+		if rerr != nil {
+			return fmt.Errorf("chunk read: %w", rerr)
+		}
+	}
+	return nil
+}
+
+func (s *Service) downloadWithYtDlp(ctx context.Context, result SearchResult, filename string, onProgress func(domain.DownloadProgress)) error {
 	outputPath := filepath.Join(s.outputDir, filename+".m4a")
 
 	dl := s.dl.Clone().
@@ -228,52 +284,178 @@ func (s *Service) downloadWithYtDlp(ctx context.Context, result SearchResult, fi
 		AudioFormat("m4a").
 		AudioQuality("0").
 		AgeLimit(99).
-		Output(outputPath)
-
-	dl.ProgressFunc(500*time.Millisecond, func(prog ytdlp.ProgressUpdate) {
-		if prog.Status == ytdlp.ProgressStatusDownloading && prog.TotalBytes > 0 {
-			pct := int(prog.Percent())
-			if pct >= 0 && pct <= 100 {
-				onProgress(domain.DownloadDownloading, 25+pct/5)
-			}
-		}
-	})
-
-	cmd := dl.BuildCommand(ctx, result.URL)
-	logs.Info("yt-dlp command: %s %v", cmd.Path, cmd.Args[1:])
+		GetURL()
 
 	r, err := dl.Run(ctx, result.URL)
-	if r != nil {
-		logs.Info("yt-dlp stdout: %s", r.Stdout)
-		logs.Info("yt-dlp stderr: %s", r.Stderr)
-	}
 	if err != nil {
-		return fmt.Errorf("yt-dlp download failed: %w", err)
+		return fmt.Errorf("yt-dlp get-url failed: %w", err)
 	}
 
-	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
-		entries, _ := os.ReadDir(s.outputDir)
-		for _, e := range entries {
-			if !e.IsDir() && strings.HasPrefix(e.Name(), filename+".") {
-				ext := filepath.Ext(e.Name())
-				if ext != ".m4a" {
-					os.Rename(filepath.Join(s.outputDir, e.Name()), outputPath)
-					break
-				}
+	mediaURL := strings.TrimSpace(r.Stdout)
+	if mediaURL == "" {
+		return fmt.Errorf("yt-dlp returned empty URL for %s", result.Title)
+	}
+
+	logs.Debug("Got media URL: %s", mediaURL)
+
+	headReq, err := http.NewRequestWithContext(ctx, http.MethodHead, mediaURL, nil)
+	if err != nil {
+		return fmt.Errorf("head request: %w", err)
+	}
+	setFirefoxHeaders(headReq)
+
+	headResp, err := http.DefaultClient.Do(headReq)
+	if err != nil {
+		return fmt.Errorf("head request: %w", err)
+	}
+	headResp.Body.Close()
+
+	fileSize := headResp.ContentLength
+	acceptsRanges := strings.EqualFold(headResp.Header.Get("Accept-Ranges"), "bytes")
+
+	out, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("create output: %w", err)
+	}
+
+	if fileSize <= 0 || !acceptsRanges {
+		logs.Debug("Single-threaded download (size: %d, ranges: %v)", fileSize, acceptsRanges)
+		err = s.downloadRange(ctx, mediaURL, out, fileSize, onProgress)
+		if err != nil {
+			out.Close()
+			return err
+		}
+		out.Close()
+		logs.Debug("Downloaded to %s", outputPath)
+		return nil
+	}
+
+	logs.Debug("Starting concurrent download with %d workers (file size: %d bytes)", s.maxDownloadThreads, fileSize)
+
+	chunkSize := fileSize / int64(s.maxDownloadThreads)
+	var downloaded atomic.Int64
+	progCancel := make(chan struct{})
+	defer close(progCancel)
+
+	go func() {
+		ticker := time.NewTicker(200 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				d := downloaded.Load()
+				pct := int(d * 100 / fileSize)
+				onProgress(domain.DownloadProgress{
+					Status:          domain.DownloadDownloading,
+					Progress:        25 + pct/5,
+					DownloadedBytes: d,
+					TotalBytes:      fileSize,
+				})
+			case <-progCancel:
+				onProgress(domain.DownloadProgress{
+					Status:          domain.DownloadDownloading,
+					Progress:        45,
+					DownloadedBytes: fileSize,
+					TotalBytes:      fileSize,
+				})
+				return
 			}
 		}
-		if _, err := os.Stat(outputPath); os.IsNotExist(err) {
-			return fmt.Errorf("yt-dlp did not produce output file for %s", result.Title)
+	}()
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	errCh := make(chan error, s.maxDownloadThreads)
+	var wg sync.WaitGroup
+
+	for i := range s.maxDownloadThreads {
+		start := chunkSize * int64(i)
+		end := chunkSize*int64(i+1) - 1
+		if i == s.maxDownloadThreads-1 {
+			end = fileSize - 1
+		}
+
+		wg.Add(1)
+		go func(chunkStart, chunkEnd int64) {
+			defer wg.Done()
+			if err := s.downloadChunk(ctx, mediaURL, out, chunkStart, chunkEnd); err != nil {
+				errCh <- err
+				cancel()
+				return
+			}
+			downloaded.Add(chunkEnd - chunkStart + 1)
+		}(start, end)
+	}
+
+	wg.Wait()
+	close(errCh)
+	out.Close()
+
+	for err := range errCh {
+		if err != nil {
+			return fmt.Errorf("concurrent download: %w", err)
 		}
 	}
 
-	entries, _ := os.ReadDir(s.outputDir)
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasPrefix(e.Name(), filename+".") && filepath.Ext(e.Name()) != ".m4a" {
-			os.Remove(filepath.Join(s.outputDir, e.Name()))
-		}
+	logs.Debug("Downloaded %d bytes to %s (%d workers)", fileSize, outputPath, s.maxDownloadThreads)
+	return nil
+}
+
+func (s *Service) downloadRange(ctx context.Context, url string, f *os.File, fileSize int64, onProgress func(domain.DownloadProgress)) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("range request: %w", err)
+	}
+	setFirefoxHeaders(req)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("range request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("range unexpected status: %s", resp.Status)
 	}
 
+	if fileSize <= 0 {
+		fileSize = resp.ContentLength
+	}
+
+	buf := make([]byte, 256*1024)
+	var written int64
+	for {
+		n, rerr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, werr := f.Write(buf[:n]); werr != nil {
+				return fmt.Errorf("range write: %w", werr)
+			}
+			written += int64(n)
+
+			if fileSize > 0 {
+				pct := int(written * 100 / fileSize)
+				onProgress(domain.DownloadProgress{
+					Status:          domain.DownloadDownloading,
+					Progress:        25 + pct/5,
+					DownloadedBytes: written,
+					TotalBytes:      fileSize,
+				})
+			}
+		}
+		if rerr == io.EOF {
+			break
+		}
+		if rerr != nil {
+			return fmt.Errorf("range read: %w", rerr)
+		}
+	}
+	onProgress(domain.DownloadProgress{
+		Status:          domain.DownloadDownloading,
+		Progress:        45,
+		DownloadedBytes: fileSize,
+		TotalBytes:      fileSize,
+	})
 	return nil
 }
 
@@ -297,13 +479,14 @@ func (s *Service) fetchThumbnail(result SearchResult, filename string, spotifyAr
 		urls = append(urls, result.Thumbnail)
 	}
 
+	thumbClient := &http.Client{Timeout: 15 * time.Second}
 	for _, thumbURL := range urls {
 		for attempt := range 3 {
 			if attempt > 0 {
 				time.Sleep(time.Second)
 			}
 
-			resp, err := http.Get(thumbURL)
+			resp, err := thumbClient.Get(thumbURL)
 			if err != nil || resp.StatusCode != http.StatusOK {
 				if resp != nil {
 					resp.Body.Close()

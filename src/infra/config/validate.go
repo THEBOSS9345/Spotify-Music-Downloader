@@ -19,6 +19,10 @@ func Validate(config *Config) (*Config, error) {
 		config.MaxConcurrentDownloads = 3
 	}
 
+	if config.MaxDownloadThreads <= 0 {
+		config.MaxDownloadThreads = 15
+	}
+
 	_ = Write(config)
 
 	return config, nil

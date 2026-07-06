@@ -122,14 +122,16 @@ func (d *Downloader) process(ctx context.Context, t *task) {
 	d.semaphore <- struct{}{}
 	defer func() { <-d.semaphore }()
 
-	update := func(status domain.DownloadStatus, progress int) {
+	update := func(p domain.DownloadProgress) {
 		d.mu.Lock()
-		t.Download.Status = status
-		t.Download.Progress = progress
+		t.Download.Status = p.Status
+		t.Download.Progress = p.Progress
+		t.Download.DownloadedBytes = p.DownloadedBytes
+		t.Download.TotalBytes = p.TotalBytes
 		d.mu.Unlock()
 		d.publishState()
 	}
-	update(domain.DownloadSearching, 0)
+	update(domain.DownloadProgress{Status: domain.DownloadSearching})
 	query := fmt.Sprintf("%s - %s", t.Download.Song.Artist, t.Download.Song.Title)
 	logs.Info("Searching: %s", query)
 
@@ -138,25 +140,25 @@ func (d *Downloader) process(ctx context.Context, t *task) {
 	if err != nil {
 		logs.Error("Search failed for %s: %v", query, err)
 		t.Download.Error = fmt.Sprintf("Search failed: %v", err)
-		update(domain.DownloadFailed, 0)
+		update(domain.DownloadProgress{Status: domain.DownloadFailed})
 		return
 	}
 
 	if len(results) == 0 {
 		t.Download.Error = "No YouTube results found"
-		update(domain.DownloadFailed, 0)
+		update(domain.DownloadProgress{Status: domain.DownloadFailed})
 		return
 	}
 	logs.Info("Found %d results for %s", len(results), query)
-	update(domain.DownloadDownloading, 10)
+	update(domain.DownloadProgress{Status: domain.DownloadDownloading, Progress: 10})
 	start := time.Now()
-	path, err := d.ytdl.Download(ctx, results[0], t.Download.Song, func(status domain.DownloadStatus, progress int) {
-		update(status, progress)
+	path, err := d.ytdl.Download(ctx, results[0], t.Download.Song, func(p domain.DownloadProgress) {
+		update(p)
 	})
 	if err != nil {
 		logs.Error("Download failed for %s: %v", t.Download.Song.Title, err)
 		t.Download.Error = err.Error()
-		update(domain.DownloadFailed, 0)
+		update(domain.DownloadProgress{Status: domain.DownloadFailed})
 		return
 	}
 	t.Download.OutputPath = path
