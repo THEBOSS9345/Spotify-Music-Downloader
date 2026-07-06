@@ -28,26 +28,71 @@ type SearchResult struct {
 	URL       string `json:"webpage_url"`
 }
 
+type InstallPaths struct {
+	YtDlp   string
+	FFmpeg  string
+	FFprobe string
+}
+
 type Service struct {
-	outputDir string
-	dl        *ytdlp.Command
+	outputDir    string
+	dl           *ytdlp.Command
+	installPaths InstallPaths
 }
 
 func New(outputDir string) *Service {
+	logs.Info("Checking and preparing media environments...")
+
+	installPaths, err := EnsureEnvironment()
+	if err != nil {
+		logs.Error("Environment configuration error: %v", err)
+	}
+
+	logs.Info("Environment successfully validated! Ready to download videos.")
+
 	dl := ytdlp.New().
 		NoPlaylist().
 		NoWarnings()
 
-	if ffmpeg, err := exec.LookPath("ffmpeg"); err == nil {
-		dl = dl.FFmpegLocation(filepath.Dir(ffmpeg))
-	} else {
-		logs.Warning("ffmpeg not found in PATH: %v", err)
+	if err == nil {
+		dl = dl.SetExecutable(installPaths.YtDlp)
+		dl = dl.FFmpegLocation(filepath.Dir(installPaths.FFmpeg))
 	}
 
 	return &Service{
-		outputDir: outputDir,
-		dl:        dl,
+		outputDir:    outputDir,
+		dl:           dl,
+		installPaths: installPaths,
 	}
+}
+
+func EnsureEnvironment() (InstallPaths, error) {
+	ytdlpResult, err := ytdlp.Install(context.Background(), &ytdlp.InstallOptions{
+		DisableSystem: true,
+	})
+	if err != nil {
+		return InstallPaths{}, fmt.Errorf("yt-dlp installation failed: %w", err)
+	}
+
+	ffmpegResult, err := ytdlp.InstallFFmpeg(context.Background(), &ytdlp.InstallFFmpegOptions{
+		DisableSystem: true,
+	})
+	if err != nil {
+		return InstallPaths{}, fmt.Errorf("ffmpeg installation failed: %w", err)
+	}
+
+	ffprobeResult, err := ytdlp.InstallFFprobe(context.Background(), &ytdlp.InstallFFmpegOptions{
+		DisableSystem: true,
+	})
+	if err != nil {
+		return InstallPaths{}, fmt.Errorf("ffprobe installation failed: %w", err)
+	}
+
+	return InstallPaths{
+		YtDlp:   ytdlpResult.Executable,
+		FFmpeg:  ffmpegResult.Executable,
+		FFprobe: ffprobeResult.Executable,
+	}, nil
 }
 
 func (s *Service) Search(ctx context.Context, query string) ([]SearchResult, error) {
@@ -127,7 +172,7 @@ func (s *Service) Download(
 	thumbPath := filepath.Join(s.outputDir, filename+".jpg")
 
 	ffmpegArgs := buildFFmpegArgs(m4aPath, mp3Path, thumbPath, hasThumb, song, result.URL)
-	cmd := exec.CommandContext(ctx, "ffmpeg", ffmpegArgs...)
+	cmd := exec.CommandContext(ctx, s.installPaths.FFmpeg, ffmpegArgs...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		os.Remove(m4aPath)
 		os.Remove(thumbPath)
