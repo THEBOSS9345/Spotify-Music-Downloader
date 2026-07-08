@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"music-downloader/src/infra/config"
+	"spotscoop/src/infra/config"
 )
 
 func Startup(cfg *config.Config, addr string) {

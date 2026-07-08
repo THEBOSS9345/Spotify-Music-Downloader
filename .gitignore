@@ -1,9 +1,9 @@
-music-downloader
+spotscoop
+spotscoop.exe
+spotscoop-linux
 spotify_token.json
 downloads/
 config.json
 *.db
 *node_modules/
-*.exe
-music-downloader-linux
 dist/

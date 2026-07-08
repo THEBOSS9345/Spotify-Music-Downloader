@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"music-downloader/src/domain"
-	"music-downloader/src/infra/logs"
-	"music-downloader/src/infra/tui"
-	"music-downloader/src/ytdl"
+	"spotscoop/src/domain"
+	"spotscoop/src/infra/logs"
+	"spotscoop/src/infra/tui"
+	"spotscoop/src/ytdl"
 
 	"github.com/google/uuid"
 )

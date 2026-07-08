@@ -37,12 +37,12 @@ jobs:
         run: |
           ext=""
           [ "$GOOS" = "windows" ] && ext=".exe"
-          go build -o "music-downloader-$GOOS$ext" -ldflags="-s -w"
+          go build -o "spotscoop-$GOOS$ext" -ldflags="-s -w"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: music-downloader-${{ matrix.os }}
-          path: music-downloader-*
+          name: spotscoop-${{ matrix.os }}
+          path: spotscoop-*
 
   release:
     needs: build
@@ -52,12 +52,12 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: music-downloader-*
+          pattern: spotscoop-*
           merge-multiple: true
 
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            music-downloader-linux
-            music-downloader-windows.exe
+            spotscoop-linux
+            spotscoop-windows.exe
           generate_release_notes: true

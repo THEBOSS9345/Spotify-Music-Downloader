@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"music-downloader/src/domain"
-	"music-downloader/src/infra/config"
-	"music-downloader/src/ytdl"
+	"spotscoop/src/domain"
+	"spotscoop/src/infra/config"
+	"spotscoop/src/ytdl"
 )
 
 func main() {

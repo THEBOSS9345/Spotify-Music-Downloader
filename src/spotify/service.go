@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"music-downloader/src/db"
-	"music-downloader/src/domain"
-	"music-downloader/src/infra/logs"
+	"spotscoop/src/db"
+	"spotscoop/src/domain"
+	"spotscoop/src/infra/logs"
 
 	"github.com/zmb3/spotify/v2"
 )

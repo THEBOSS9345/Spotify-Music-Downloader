@@ -15,8 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"music-downloader/src/domain"
-	"music-downloader/src/infra/logs"
+	"spotscoop/src/domain"
+	"spotscoop/src/infra/logs"
 
 	"github.com/lrstanley/go-ytdlp"
 )

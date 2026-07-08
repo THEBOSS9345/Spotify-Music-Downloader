@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"music-downloader/src/domain"
+	"spotscoop/src/domain"
 
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"

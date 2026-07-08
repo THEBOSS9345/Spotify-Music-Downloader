@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"music-downloader/src/domain"
+	"spotscoop/src/domain"
 
 	_ "modernc.org/sqlite"
 )

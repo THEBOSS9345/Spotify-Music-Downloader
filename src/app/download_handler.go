@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"music-downloader/src/domain"
+	"spotscoop/src/domain"
 )
 
 func (h *Handler) handleRetry(w http.ResponseWriter, r *http.Request) {

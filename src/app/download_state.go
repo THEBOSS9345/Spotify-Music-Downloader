@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"music-downloader/src/domain"
+	"spotscoop/src/domain"
 )
 
 type DownloadState struct {

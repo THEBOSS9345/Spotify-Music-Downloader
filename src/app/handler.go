@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"music-downloader/src/auth"
-	"music-downloader/src/domain"
-	"music-downloader/src/infra/config"
-	"music-downloader/src/infra/logs"
-	"music-downloader/src/spotify"
-	"music-downloader/src/ytdl"
+	"spotscoop/src/auth"
+	"spotscoop/src/domain"
+	"spotscoop/src/infra/config"
+	"spotscoop/src/infra/logs"
+	"spotscoop/src/spotify"
+	"spotscoop/src/ytdl"
 )
 
 type Handler struct {

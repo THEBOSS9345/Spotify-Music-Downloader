@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"music-downloader/src/infra/logs"
-	"music-downloader/src/spotify"
+	"spotscoop/src/infra/logs"
+	"spotscoop/src/spotify"
 )
 
 func (h *Handler) handlePlaylistsRefresh(w http.ResponseWriter, r *http.Request) {

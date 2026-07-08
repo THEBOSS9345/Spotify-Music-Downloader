@@ -1,11 +1,11 @@
 ## 👋 Welcome!
 
-This is a place to discuss **Spotify Music Downloader** — ask questions, share ideas, troubleshoot, or talk about improvements.
+This is a place to discuss **SpotScoop** — ask questions, share ideas, troubleshoot, or talk about improvements.
 
 Before posting:
-- Check the [README](https://github.com/theboss9345/Spotify-Music-Downloader#readme) for setup and usage.
+- Check the [README](https://github.com/theboss9345/SpotScoop#readme) for setup and usage.
 - Search existing discussions and issues first — your question may already be answered.
-- Bug reports and feature requests should go in [Issues](https://github.com/theboss9345/Spotify-Music-Downloader/issues), not Discussions.
+- Bug reports and feature requests should go in [Issues](https://github.com/theboss9345/SpotScoop/issues), not Discussions.
 
 ### Categories
 

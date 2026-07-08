@@ -3,7 +3,7 @@ package app
 import (
 	"net/http"
 
-	"music-downloader/src/infra/logs"
+	"spotscoop/src/infra/logs"
 )
 
 func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {

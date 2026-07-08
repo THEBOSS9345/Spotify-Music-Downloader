@@ -2,7 +2,7 @@ version: 2
 
 builds:
   - main: .
-    binary: music-downloader
+    binary: spotscoop
     ldflags:
       - -s -w
     env:
@@ -17,7 +17,7 @@ builds:
 
 
 archives:
-  - name_template: "music-downloader_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+  - name_template: "spotscoop_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
         formats: zip

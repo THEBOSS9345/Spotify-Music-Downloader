@@ -1,6 +1,6 @@
-# Spotify Music Downloader
+# SpotScoop 🎵
 
-Download your Spotify playlists as MP3s with metadata and album art embedded. Log in with Spotify, browse your library or search, and it downloads matching audio from YouTube.
+Scoop your Spotify playlists — downloads matching audio from YouTube as MP3s with metadata and album art.
 
 Works on **Linux** and **Windows**.
 
@@ -10,8 +10,8 @@ Works on **Linux** and **Windows**.
 
 ```bash
 # 1. Clone and enter the project
-git clone https://github.com/your-username/music-downloader
-cd music-downloader
+git clone https://github.com/theboss9345/SpotScoop
+cd SpotScoop
 
 # 2. Build the frontend (required before Go build)
 cd frontend
@@ -20,11 +20,11 @@ npm run build
 cd ..
 
 # 3. Build the Go binary
-go build -o music-downloader
+go build -o spotscoop
 
 # 4. Run it
-./music-downloader          # Linux/macOS
-music-downloader.exe        # Windows
+./spotscoop           # Linux/macOS
+spotscoop.exe         # Windows
 ```
 
 Open http://127.0.0.1:50811.

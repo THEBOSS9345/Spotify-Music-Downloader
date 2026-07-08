@@ -1,4 +1,4 @@
-module music-downloader
+module spotscoop
 
 go 1.26.3
 

@@ -12,8 +12,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"music-downloader/src/infra/config"
-	"music-downloader/src/infra/logs"
+	"spotscoop/src/infra/config"
+	"spotscoop/src/infra/logs"
 )
 
 type tuiState int
