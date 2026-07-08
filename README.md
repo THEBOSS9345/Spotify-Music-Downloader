@@ -8,9 +8,9 @@ Works on **Linux** and **Windows**.
 <summary><b>Screenshots</b></summary>
 
 <p align="center">
-  <img src="image-1.png" alt="Terminal UI" width="49%">
+  <img src="screenshots/image-1.png" alt="Terminal UI" width="49%">
   &nbsp;
-  <img src="image-2.png" alt="Web UI" width="49%">
+  <img src="screenshots/image-2.png" alt="Web UI" width="49%">
 </p>
 
 </details>
