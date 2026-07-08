@@ -26,7 +26,7 @@ export function Layout({ user, onLogout, children }: { user: User | null; onLogo
             </svg>
           </button>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Spotify Music Downloader
+            SpotScoop
           </div>
         </div>
         <div className="main-scroll" style={{ flex: 1, overflowY: 'auto' }}>

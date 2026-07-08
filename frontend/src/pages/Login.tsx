@@ -13,7 +13,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
           <circle cx="12" cy="12" r="10" />
           <path d="M9 18V6l11 6-11 6z" fill="var(--accent)" stroke="none" />
         </svg>
-        <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 6 }}>Music Downloader</h1>
+        <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 6 }}>SpotScoop</h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.5, marginBottom: 28 }}>
           Download Spotify playlists<br />from YouTube
         </p>
