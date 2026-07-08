@@ -593,7 +593,7 @@ func (m model) configErrorView() string {
 			"  • Add Redirect URI:\n\n    %s\n\n"+
 			"  • Copy your Client ID and Client Secret\n    into config.json\n\n"+
 			"%s",
-		titleStyle.Render("🎵 Spotify Music Downloader"),
+		titleStyle.Render("🎵 SpotScoop"),
 		authorStyle.Render("by THEBOSS9345"),
 		errTitleStyle.Render("✗ "+errMsg),
 		stepStyle.Render("Setup Steps"),
@@ -623,7 +623,7 @@ func (m model) setupErrorView() string {
 
 	content := fmt.Sprintf(
 		"%s %s\n\n%s\n\n%s\n\n%s",
-		titleStyle.Render("🎵 Spotify Music Downloader"),
+		titleStyle.Render("🎵 SpotScoop"),
 		authorStyle.Render("by THEBOSS9345"),
 		errTitleStyle.Render("✗ Setup Error"),
 		lines,
@@ -792,7 +792,7 @@ func (m model) progressBar(pct int, maxWidth int) string {
 }
 
 func (m model) headerView() string {
-	title := titleStyle.Render("🎵 Spotify Music Downloader")
+	title := titleStyle.Render("🎵 SpotScoop")
 	author := authorStyle.Render("by THEBOSS9345")
 	status := statusDot
 	addr := addrStyle.Render("http://" + m.addr)

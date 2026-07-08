@@ -19,7 +19,7 @@ func Startup(cfg *config.Config, addr string) {
 			"Listening for requests...\n\n"+
 			"%s",
 
-		Title.Render("🎵 Spotify Music Downloader\nby THEBOSS9345"),
+		Title.Render("🎵 SpotScoop\nby THEBOSS9345"),
 
 		Header.Render("Server"),
 
@@ -57,7 +57,7 @@ func ConfigError(err error, addr string) {
 			" 4. Copy your Client ID and Client Secret\n"+
 			"    into config.json",
 
-		Title.Render("🎵 Spotify Music Downloader\nby THEBOSS9345"),
+		Title.Render("🎵 SpotScoop\nby THEBOSS9345"),
 
 		Error.Render("Configuration Error"),
 
