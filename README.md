@@ -4,6 +4,12 @@ Download your Spotify playlists as MP3s with metadata and album art embedded. Lo
 
 Works on **Linux** and **Windows**.
 
+<p align="center">
+  <img src="image-1.png" alt="Terminal UI" width="49%">
+  &nbsp;
+  <img src="image-2.png" alt="Web UI" width="49%">
+</p>
+
 ## Quick Start
 
 ```bash
