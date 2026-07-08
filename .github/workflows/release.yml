@@ -2,86 +2,62 @@ name: Release
 
 on:
   push:
-    branches: [main]
-    tags: ["v*"]
-
-permissions:
-  contents: write
+    tags:
+      - "v*"
 
 jobs:
-  tag-and-release:
-    if: github.ref_type == 'branch' && github.ref_name == 'main'
+  build:
     runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.get-tag.outputs.tag }}
+    strategy:
+      matrix:
+        os: [linux, windows]
     steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
 
-      - id: get-tag
-        run: |
-          git fetch --tags origin
-          latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || echo "v0.0.0")
-          echo "latest=$latest"
-          IFS='.' read -r major minor patch <<< "${latest#v}"
-          newtag="v$((major+0)).$((minor+0)).$((patch+1))"
-          echo "tag=$newtag" >> $GITHUB_OUTPUT
-
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - uses: actions/setup-go@v6
+      - run: npm ci
+        working-directory: frontend
+
+      - run: npm run build
+        working-directory: frontend
+
+      - uses: actions/setup-go@v5
         with:
           go-version: stable
           cache: true
 
-      - run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git tag ${{ steps.get-tag.outputs.tag }} ${{ github.sha }}
-          git push origin ${{ steps.get-tag.outputs.tag }}
-
-      - name: Build frontend
-        run: |
-          cd frontend && npm ci && npm run build
-          ls -la ../src/app/ui/dist/
-
-      - uses: goreleaser/goreleaser-action@v7
-        with:
-          args: release --clean --skip=before
+      - name: Build
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOS: ${{ matrix.os }}
+        run: |
+          ext=""
+          [ "$GOOS" = "windows" ] && ext=".exe"
+          go build -o "music-downloader-$GOOS$ext" -ldflags="-s -w"
 
-  release-from-tag:
-    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+      - uses: actions/upload-artifact@v4
+        with:
+          name: music-downloader-${{ matrix.os }}
+          path: music-downloader-*
+
+  release:
+    needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
         with:
-          fetch-depth: 0
+          pattern: music-downloader-*
+          merge-multiple: true
 
-      - uses: actions/setup-node@v5
+      - uses: softprops/action-gh-release@v2
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: stable
-          cache: true
-
-      - name: Build frontend
-        run: |
-          cd frontend && npm ci && npm run build
-          ls -la ../src/app/ui/dist/
-
-      - uses: goreleaser/goreleaser-action@v7
-        with:
-          args: release --clean --skip=before
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            music-downloader-linux
+            music-downloader-windows.exe
+          generate_release_notes: true
