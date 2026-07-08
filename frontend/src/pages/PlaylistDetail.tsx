@@ -20,11 +20,14 @@ export function PlaylistDetail() {
 
   useEffect(() => {
     if (!id) return
-    api.playlistTracks(id).then(s => {
+    const ac = new AbortController()
+    setLoading(true)
+    api.playlistTracks(id, ac.signal).then(s => {
       const sorted = (s || []).slice().sort((a, b) => a.title.localeCompare(b.title))
       setSongs(sorted)
       setLoading(false)
-    }).catch(() => setLoading(false))
+    }).catch(() => {})
+    return () => ac.abort()
   }, [id])
 
   const handleRefresh = useCallback(async () => {
@@ -69,7 +72,7 @@ export function PlaylistDetail() {
   }
 
   return (
-    <div className="fade-in" style={{ padding: 28 }}>
+    <div className="fade-in page" style={{ padding: 28 }}>
       <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
         <button onClick={() => startDownload(songs)} className="pill pill-primary">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -120,8 +123,8 @@ export function PlaylistDetail() {
             </button>
             <div>Title</div>
             <div>Artist</div>
-            <div>Album</div>
-            <div style={{ textAlign: 'right' }}>Time</div>
+            <div className="hide-mobile">Album</div>
+            <div className="hide-mobile" style={{ textAlign: 'right' }}>Time</div>
             <div />
           </div>
           {filtered.map((s, i) => {
@@ -160,8 +163,8 @@ export function PlaylistDetail() {
                   {s.title}
                 </div>
                 <div style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.artist}</div>
-                <div style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.album}</div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: 12, textAlign: 'right' }}>{fmt(s.duration)}</div>
+                <div className="hide-mobile" style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.album}</div>
+                <div className="hide-mobile" style={{ color: 'var(--text-secondary)', fontSize: 12, textAlign: 'right' }}>{fmt(s.duration)}</div>
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
                   <button onClick={e => { e.stopPropagation(); startDownload([s]) }} disabled={downloading.has(s.id)} className="row-hover" style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center',

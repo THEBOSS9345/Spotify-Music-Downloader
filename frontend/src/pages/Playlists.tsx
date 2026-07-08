@@ -62,7 +62,7 @@ export function Playlists() {
   }
 
   return (
-    <div className="fade-in" style={{ padding: 28, maxWidth: 1100 }}>
+    <div className="fade-in page" style={{ padding: 28, maxWidth: 1100 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
         <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em' }}>Your Library</h1>
         <button onClick={handleRefresh} disabled={refreshing} className="pill pill-outline" style={{ marginLeft: 'auto' }}>

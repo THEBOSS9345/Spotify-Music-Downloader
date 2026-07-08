@@ -8,6 +8,7 @@ import (
 
 	"music-downloader/src/domain"
 	"music-downloader/src/infra/logs"
+	"music-downloader/src/infra/tui"
 	"music-downloader/src/ytdl"
 
 	"github.com/google/uuid"
@@ -36,12 +37,40 @@ func NewDownloader(ytdl *ytdl.Service, broker *Broker, maxConcurrent int) *Downl
 }
 
 func (d *Downloader) publishState() {
-	if !d.broker.HasClients() {
-		return
-	}
 	all := d.GetAll()
 	active, queued := d.GetActive()
-	d.broker.Publish(BuildDownloadState(all, active, queued))
+
+	if d.broker.HasClients() {
+		d.broker.Publish(BuildDownloadState(all, active, queued))
+	}
+
+	tracks := make([]tui.TrackState, len(all))
+	var completeCount, failedCount int
+	for i, dl := range all {
+		tracks[i] = tui.TrackState{
+			ID:              dl.ID,
+			Title:           dl.Song.Title,
+			Artist:          dl.Song.Artist,
+			Status:          string(dl.Status),
+			Progress:        dl.Progress,
+			DownloadedBytes: dl.DownloadedBytes,
+			TotalBytes:      dl.TotalBytes,
+			Error:           dl.Error,
+		}
+		switch dl.Status {
+		case domain.DownloadComplete:
+			completeCount++
+		case domain.DownloadFailed:
+			failedCount++
+		}
+	}
+	tui.SendDownloadState(tui.DownloadState{
+		Tracks:   tracks,
+		Active:   len(active),
+		Queued:   len(queued),
+		Complete: completeCount,
+		Failed:   failedCount,
+	})
 }
 
 func (d *Downloader) Start(songs []domain.Song) string {

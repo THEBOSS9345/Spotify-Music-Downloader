@@ -16,11 +16,13 @@ export function Search() {
 
   useEffect(() => {
     if (!query) return
+    const ac = new AbortController()
     setLoading(true)
-    api.search(query).then(s => {
+    api.search(query, ac.signal).then(s => {
       setResults(s || [])
       setLoading(false)
-    }).catch(() => setLoading(false))
+    }).catch(() => {})
+    return () => ac.abort()
   }, [query])
 
   const toggle = useCallback((id: string) => setSelected(p => {
@@ -38,7 +40,7 @@ export function Search() {
   const allSelected = results.length > 0 && selected.size === results.length
 
   return (
-    <div className="fade-in" style={{ padding: 28 }}>
+    <div className="fade-in page" style={{ padding: 28 }}>
       <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 20, letterSpacing: '-0.02em' }}>
         {query ? `"${query}"` : 'Search'}
       </h1>
@@ -93,8 +95,8 @@ export function Search() {
             </button>
             <div>Title</div>
             <div>Artist</div>
-            <div>Album</div>
-            <div style={{ textAlign: 'right' }}>Time</div>
+            <div className="hide-mobile">Album</div>
+            <div className="hide-mobile" style={{ textAlign: 'right' }}>Time</div>
             <div />
           </div>
           {results.map((s, i) => {
@@ -132,8 +134,8 @@ export function Search() {
                   {s.title}
                 </div>
                 <div style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.artist}</div>
-                <div style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.album}</div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: 12, textAlign: 'right' }}>{fmt(s.duration)}</div>
+                <div className="hide-mobile" style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.album}</div>
+                <div className="hide-mobile" style={{ color: 'var(--text-secondary)', fontSize: 12, textAlign: 'right' }}>{fmt(s.duration)}</div>
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
                   <button onClick={e => { e.stopPropagation(); startDownload([s]) }} disabled={downloading.has(s.id)} className="row-hover" style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center',

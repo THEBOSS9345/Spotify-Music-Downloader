@@ -3,12 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
-	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 
 	"music-downloader/src/app"
 	"music-downloader/src/app/ui"
@@ -17,6 +13,7 @@ import (
 	"music-downloader/src/domain"
 	"music-downloader/src/infra/config"
 	"music-downloader/src/infra/logs"
+	"music-downloader/src/infra/tui"
 	spotifyservice "music-downloader/src/spotify"
 	"music-downloader/src/ytdl"
 
@@ -24,32 +21,21 @@ import (
 )
 
 func main() {
-
 	addr := "127.0.0.1:50811"
 
-	fmt.Println()
-	fmt.Println("  Music Downloader - THEBOSS9345")
-	fmt.Println("  " + strings.Repeat("-", 54))
-	fmt.Printf("  Server:  http://%s\n", addr)
-	fmt.Println()
-	fmt.Println("  Spotify Setup Required")
-	fmt.Println("  Go to https://developer.spotify.com/dashboard")
-	fmt.Println("  and add this Redirect URI:")
-	fmt.Printf("    http://%s/api/auth\n", addr)
+	tui.Run(addr, func(cfg *config.Config) (*http.Server, func(), error) {
+		logs.SetDebug(cfg.Debug)
 
-	cfg, err := config.Init()
-	if err != nil {
-		log.Fatal(err)
-	}
+		srv, handler, cleanup, err := setupServer(cfg, addr)
+		if err != nil {
+			return nil, nil, err
+		}
 
-	logs.SetDebug(cfg.Debug)
+		return srv, func() { handler.Shutdown(); cleanup() }, nil
+	})
+}
 
-	fmt.Printf("  Downloads folder: %s\n", cfg.OutputDir)
-	fmt.Println()
-	fmt.Println("  Press Ctrl+C to stop")
-	fmt.Println("  " + strings.Repeat("-", 54))
-	fmt.Println()
-
+func setupServer(cfg *config.Config, addr string) (*http.Server, *app.Handler, func(), error) {
 	authServer := auth.NewSpotifyAuthServer(
 		cfg.Spotify.ClientId,
 		cfg.Spotify.ClientSecret,
@@ -57,16 +43,11 @@ func main() {
 	)
 
 	database, err := db.New("music_downloader.db")
-
 	if err != nil {
-		logs.Error("Failed to initialize database: %v", err)
-		return
+		return nil, nil, nil, fmt.Errorf("database: %w", err)
 	}
 
-	defer database.Close()
-
 	svc := spotifyservice.New()
-
 	svc.SetDB(database)
 
 	dl := ytdl.New(cfg.OutputDir, cfg.MaxDownloadThreads)
@@ -80,8 +61,8 @@ func main() {
 
 	distFS, err := ui.DistFS()
 	if err != nil {
-		logs.Error("Failed to load embedded frontend: %v", err)
-		return
+		database.Close()
+		return nil, nil, nil, fmt.Errorf("frontend: %w", err)
 	}
 
 	fileServer := http.FileServer(http.FS(distFS))
@@ -107,7 +88,6 @@ func main() {
 
 	go func() {
 		client, httpClient, user, err := authServer.LoadToken(context.Background())
-
 		if err != nil {
 			logs.Info("No saved session, waiting for login")
 			return
@@ -120,20 +100,5 @@ func main() {
 		}
 	}()
 
-	logs.Info("Server running at http://%s", addr)
-
-	srv := &http.Server{Addr: addr, Handler: mux}
-
-	go func() {
-		sigCh := make(chan os.Signal, 1)
-		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-		sig := <-sigCh
-		logs.Info("Received %v, shutting down...", sig)
-		handler.Shutdown()
-		srv.Shutdown(context.Background())
-	}()
-
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		logs.Error("Server error: %v", err)
-	}
+	return &http.Server{Addr: addr, Handler: mux}, handler, func() { database.Close() }, nil
 }

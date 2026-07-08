@@ -4,16 +4,17 @@ import { api } from '../api'
 import { useDownloadState } from '../useDownloadState'
 import type { Playlist, User } from '../types'
 
-export function Sidebar({ user, onLogout }: { user: User | null; onLogout: () => void }) {
+export function Sidebar({ user, onLogout, onMobileClose }: { user: User | null; onLogout: () => void; onMobileClose?: () => void }) {
   const [playlists, setPlaylists] = useState<Playlist[]>([])
+  const [playlistsLoading, setPlaylistsLoading] = useState(true)
   const { active, queued } = useDownloadState()
   const navigate = useNavigate()
   const location = useLocation()
   const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
-    api.playlists().then(p => setPlaylists(p || [])).catch(() => {})
-  }, [location.pathname])
+    api.playlists().then(p => { setPlaylists(p || []); setPlaylistsLoading(false) }).catch(() => setPlaylistsLoading(false))
+  }, [])
 
   const handleSearch = useCallback((e: React.FormEvent) => {
     e.preventDefault()
@@ -22,18 +23,18 @@ export function Sidebar({ user, onLogout }: { user: User | null; onLogout: () =>
     }
   }, [searchQuery, navigate])
 
-  const nav = (to: string) => navigate(to)
+  const nav = (to: string) => { navigate(to); onMobileClose?.() }
   const activePath = (path: string) => location.pathname === path ? 'var(--bg-active)' : 'transparent'
 
   return (
     <aside style={{
       width: 'var(--sidebar)', background: 'var(--bg)', display: 'flex', flexDirection: 'column',
-      flexShrink: 0, borderRight: '1px solid var(--border)', overflow: 'hidden',
+      flexShrink: 0, borderRight: '1px solid var(--border)', height: '100%',
     }}>
       {/* User */}
       <div style={{ padding: '16px 14px', borderBottom: '1px solid var(--border)' }}>
         {user && (
-          <div onClick={() => nav('/downloads')} className="row-hover" style={{
+          <div onClick={() => nav('/')} className="row-hover" style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 'var(--radius)',
           }}>
             {user.avatarUrl ? (
@@ -70,7 +71,11 @@ export function Sidebar({ user, onLogout }: { user: User | null; onLogout: () =>
             Playlists
           </div>
         </div>
-        {playlists.map(p => (
+        {playlistsLoading ? (
+          <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-subdued)', fontSize: 12 }}>
+            Loading...
+          </div>
+        ) : playlists.map(p => (
           <div key={p.id} onClick={() => nav(`/playlist/${p.id}`)} className="row-hover" style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px',
             margin: '0 6px', borderRadius: 'var(--radius-sm)',

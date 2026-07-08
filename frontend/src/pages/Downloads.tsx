@@ -56,7 +56,7 @@ export function Downloads() {
   })()
 
   return (
-    <div className="fade-in" style={{ padding: 28, maxWidth: 720 }}>
+    <div className="fade-in page" style={{ padding: 28, maxWidth: 720 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>Downloads</h1>
         {(active > 0 || queued > 0) && (
