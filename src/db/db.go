@@ -27,14 +27,17 @@ type cachedPlaylist struct {
 }
 
 type cachedTrack struct {
-	ID         string `json:"id"`
-	PlaylistID string `json:"playlist_id"`
-	Title      string `json:"title"`
-	Artist     string `json:"artist"`
-	Album      string `json:"album"`
-	Duration   int    `json:"duration"`
-	AlbumArt   string `json:"album_art"`
-	TrackNum   int    `json:"track_num"`
+	ID          string `json:"id"`
+	PlaylistID  string `json:"playlist_id"`
+	Title       string `json:"title"`
+	Artist      string `json:"artist"`
+	Album       string `json:"album"`
+	AlbumArtist string `json:"album_artist"`
+	Duration    int    `json:"duration"`
+	AlbumArt    string `json:"album_art"`
+	TrackNum    int    `json:"track_num"`
+	DiscNum     int    `json:"disc_num"`
+	Year        int    `json:"year"`
 }
 
 func New(path string) (*DB, error) {
@@ -71,9 +74,12 @@ func (db *DB) migrate() error {
 		title TEXT NOT NULL DEFAULT '',
 		artist TEXT NOT NULL DEFAULT '',
 		album TEXT NOT NULL DEFAULT '',
+		album_artist TEXT NOT NULL DEFAULT '',
 		duration INTEGER NOT NULL DEFAULT 0,
 		album_art TEXT NOT NULL DEFAULT '',
 		track_num INTEGER NOT NULL DEFAULT 0,
+		disc_num INTEGER NOT NULL DEFAULT 0,
+		year INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (id, playlist_id)
 	);
 	CREATE TABLE IF NOT EXISTS downloads (
@@ -91,7 +97,14 @@ func (db *DB) migrate() error {
 		updated_at INTEGER NOT NULL DEFAULT 0
 	);`
 	_, err := db.conn.Exec(schema)
-	return err
+	if err != nil {
+		return err
+	}
+
+	db.conn.Exec("ALTER TABLE tracks ADD COLUMN album_artist TEXT NOT NULL DEFAULT ''")
+	db.conn.Exec("ALTER TABLE tracks ADD COLUMN disc_num INTEGER NOT NULL DEFAULT 0")
+	db.conn.Exec("ALTER TABLE tracks ADD COLUMN year INTEGER NOT NULL DEFAULT 0")
+	return nil
 }
 
 const cacheTTL = 5 * time.Minute
@@ -187,7 +200,7 @@ func (db *DB) GetCachedTracksStale(playlistID string) ([]domain.Song, bool, erro
 	}
 	stale := time.Now().Add(-cacheTTL).Unix() > updatedAt
 
-	rows, err := db.conn.Query(`SELECT id, title, artist, album, duration, album_art, track_num FROM tracks WHERE playlist_id = ? ORDER BY track_num`, playlistID)
+	rows, err := db.conn.Query(`SELECT id, title, artist, album, album_artist, duration, album_art, track_num, disc_num, year FROM tracks WHERE playlist_id = ? ORDER BY track_num`, playlistID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -196,18 +209,21 @@ func (db *DB) GetCachedTracksStale(playlistID string) ([]domain.Song, bool, erro
 	var songs []domain.Song
 	for rows.Next() {
 		var ct cachedTrack
-		if err := rows.Scan(&ct.ID, &ct.Title, &ct.Artist, &ct.Album, &ct.Duration, &ct.AlbumArt, &ct.TrackNum); err != nil {
+		if err := rows.Scan(&ct.ID, &ct.Title, &ct.Artist, &ct.Album, &ct.AlbumArtist, &ct.Duration, &ct.AlbumArt, &ct.TrackNum, &ct.DiscNum, &ct.Year); err != nil {
 			continue
 		}
 		songs = append(songs, domain.Song{
-			ID:         ct.ID,
-			Title:      ct.Title,
-			Artist:     ct.Artist,
-			Album:      ct.Album,
-			Duration:   ct.Duration,
-			AlbumArt:   ct.AlbumArt,
-			TrackNum:   ct.TrackNum,
-			PlaylistID: playlistID,
+			ID:          ct.ID,
+			Title:       ct.Title,
+			Artist:      ct.Artist,
+			Album:       ct.Album,
+			AlbumArtist: ct.AlbumArtist,
+			Duration:    ct.Duration,
+			AlbumArt:    ct.AlbumArt,
+			TrackNum:    ct.TrackNum,
+			DiscNum:     ct.DiscNum,
+			Year:        ct.Year,
+			PlaylistID:  playlistID,
 		})
 	}
 	if len(songs) == 0 {
@@ -230,8 +246,8 @@ func (db *DB) CacheTracks(playlistID string, songs []domain.Song) error {
 	_, _ = tx.Exec(`UPDATE playlists SET track_count = ?, updated_at = ? WHERE id = ?`, len(songs), now, playlistID)
 
 	for _, s := range songs {
-		_, err := tx.Exec(`INSERT OR REPLACE INTO tracks (id, playlist_id, title, artist, album, duration, album_art, track_num) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			s.ID, playlistID, s.Title, s.Artist, s.Album, s.Duration, s.AlbumArt, s.TrackNum)
+		_, err := tx.Exec(`INSERT OR REPLACE INTO tracks (id, playlist_id, title, artist, album, album_artist, duration, album_art, track_num, disc_num, year) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			s.ID, playlistID, s.Title, s.Artist, s.Album, s.AlbumArtist, s.Duration, s.AlbumArt, s.TrackNum, s.DiscNum, s.Year)
 		if err != nil {
 			return err
 		}

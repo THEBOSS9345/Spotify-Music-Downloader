@@ -17,7 +17,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	svc := ytdl.New(cfg.OutputDir, cfg.MaxDownloadThreads)
+	svc := ytdl.New(cfg.OutputDir, cfg.MaxDownloadThreads, cfg.Youtube)
 
 	ctx := context.Background()
 

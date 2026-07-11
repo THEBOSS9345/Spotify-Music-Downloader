@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -127,12 +128,13 @@ type rawItem struct {
 }
 
 type rawItemData struct {
-	ID       string      `json:"id"`
-	Name     string      `json:"name"`
-	Artists  []rawArtist `json:"artists"`
-	Album    rawAlbum    `json:"album"`
-	Duration int         `json:"duration_ms"`
-	TrackNum int         `json:"track_number"`
+	ID         string      `json:"id"`
+	Name       string      `json:"name"`
+	Artists    []rawArtist `json:"artists"`
+	Album      rawAlbum    `json:"album"`
+	Duration   int         `json:"duration_ms"`
+	TrackNum   int         `json:"track_number"`
+	DiscNum    int         `json:"disc_number"`
 }
 
 type rawArtist struct {
@@ -140,8 +142,9 @@ type rawArtist struct {
 }
 
 type rawAlbum struct {
-	Name   string     `json:"name"`
-	Images []rawImage `json:"images"`
+	Name        string     `json:"name"`
+	Images      []rawImage `json:"images"`
+	ReleaseDate string     `json:"release_date"`
 }
 
 type rawImage struct {
@@ -168,6 +171,8 @@ type rawSearchItem struct {
 	Artists  []rawArtist `json:"artists"`
 	Album    rawAlbum    `json:"album"`
 	Duration int         `json:"duration_ms"`
+	TrackNum int         `json:"track_number"`
+	DiscNum  int         `json:"disc_number"`
 }
 
 type rawPlaylistResponse struct {
@@ -272,26 +277,38 @@ func (s *Service) SearchTracks(ctx context.Context, query string) ([]domain.Song
 		return nil, fmt.Errorf("parse search response: %v", err)
 	}
 
-	result := make([]domain.Song, 0, len(data.Tracks.Items))
-	for _, item := range data.Tracks.Items {
-		song := domain.Song{
-			ID:    item.ID,
-			Title: item.Name,
-		}
-		if len(item.Artists) > 0 {
-			song.Artist = item.Artists[0].Name
-		}
-		if item.Album.Name != "" {
-			song.Album = item.Album.Name
-			if len(item.Album.Images) > 0 {
-				song.AlbumArt = item.Album.Images[0].URL
+		result := make([]domain.Song, 0, len(data.Tracks.Items))
+		for _, item := range data.Tracks.Items {
+			song := domain.Song{
+				ID:    item.ID,
+				Title: item.Name,
 			}
+			if len(item.Artists) > 0 {
+				song.Artist = item.Artists[0].Name
+				parts := make([]string, len(item.Artists))
+				for i, a := range item.Artists {
+					parts[i] = a.Name
+				}
+				song.AlbumArtist = strings.Join(parts, ", ")
+			}
+			if item.Album.Name != "" {
+				song.Album = item.Album.Name
+				if len(item.Album.Images) > 0 {
+					song.AlbumArt = item.Album.Images[0].URL
+				}
+				song.Year = parseYear(item.Album.ReleaseDate)
+			}
+			if item.Duration > 0 {
+				song.Duration = item.Duration / 1000
+			}
+			if item.TrackNum > 0 {
+				song.TrackNum = item.TrackNum
+			}
+			if item.DiscNum > 0 {
+				song.DiscNum = item.DiscNum
+			}
+			result = append(result, song)
 		}
-		if item.Duration > 0 {
-			song.Duration = item.Duration / 1000
-		}
-		result = append(result, song)
-	}
 
 	return result, nil
 }
@@ -381,18 +398,27 @@ func (s *Service) fetchTracksOAuth(ctx context.Context, playlistID string) ([]do
 			}
 			if len(item.Track.Artists) > 0 {
 				song.Artist = item.Track.Artists[0].Name
+				parts := make([]string, len(item.Track.Artists))
+				for i, a := range item.Track.Artists {
+					parts[i] = a.Name
+				}
+				song.AlbumArtist = strings.Join(parts, ", ")
 			}
 			if item.Track.Album.Name != "" {
 				song.Album = item.Track.Album.Name
 				if len(item.Track.Album.Images) > 0 {
 					song.AlbumArt = item.Track.Album.Images[0].URL
 				}
+				song.Year = parseYear(item.Track.Album.ReleaseDate)
 			}
 			if item.Track.Duration > 0 {
 				song.Duration = item.Track.Duration / 1000
 			}
 			if item.Track.TrackNum > 0 {
 				song.TrackNum = item.Track.TrackNum
+			}
+			if item.Track.DiscNum > 0 {
+				song.DiscNum = item.Track.DiscNum
 			}
 			result = append(result, song)
 		}
@@ -410,4 +436,14 @@ func (s *Service) fetchTracksOAuth(ctx context.Context, playlistID string) ([]do
 	}
 
 	return result, nil
+}
+
+func parseYear(date string) int {
+	if len(date) >= 4 {
+		y, err := strconv.Atoi(date[:4])
+		if err == nil && y > 0 {
+			return y
+		}
+	}
+	return 0
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"spotscoop/src/domain"
+	"spotscoop/src/infra/config"
 	"spotscoop/src/infra/logs"
 
 	"github.com/lrstanley/go-ytdlp"
@@ -34,6 +35,7 @@ type InstallPaths struct {
 	YtDlp   string
 	FFmpeg  string
 	FFprobe string
+	Bun     string
 }
 
 type Service struct {
@@ -41,9 +43,10 @@ type Service struct {
 	dl                 *ytdlp.Command
 	installPaths       InstallPaths
 	maxDownloadThreads int
+	ytCfg              config.YoutubeConfig
 }
 
-func New(outputDir string, maxDownloadThreads int) *Service {
+func New(outputDir string, maxDownloadThreads int, ytCfg config.YoutubeConfig) *Service {
 	logs.Info("Checking and preparing media environments...")
 
 	installPaths, err := EnsureEnvironment()
@@ -55,7 +58,16 @@ func New(outputDir string, maxDownloadThreads int) *Service {
 
 	dl := ytdlp.New().
 		NoPlaylist().
-		NoWarnings()
+		NoWarnings().
+		JsRuntimes("bun:" + installPaths.Bun)
+
+	if ytCfg.Cookies != "" {
+		if _, err := os.Stat(ytCfg.Cookies); err == nil {
+			dl = dl.Cookies(ytCfg.Cookies)
+		} else {
+			logs.Warning("cookies file not found: %s", ytCfg.Cookies)
+		}
+	}
 
 	if err == nil {
 		dl = dl.SetExecutable(installPaths.YtDlp)
@@ -67,6 +79,7 @@ func New(outputDir string, maxDownloadThreads int) *Service {
 		dl:                 dl,
 		installPaths:       installPaths,
 		maxDownloadThreads: maxDownloadThreads,
+		ytCfg:              ytCfg,
 	}
 }
 
@@ -76,6 +89,14 @@ func EnsureEnvironment() (InstallPaths, error) {
 	})
 	if err != nil {
 		return InstallPaths{}, fmt.Errorf("yt-dlp installation failed: %w", err)
+	}
+
+	bunResult, err := ytdlp.InstallBun(context.Background(), &ytdlp.InstallBunOptions{
+		DisableSystem: true,
+	})
+
+	if err != nil {
+		return InstallPaths{}, fmt.Errorf("bun installation failed: %w", err)
 	}
 
 	ffmpegResult, err := ytdlp.InstallFFmpeg(context.Background(), &ytdlp.InstallFFmpegOptions{
@@ -96,6 +117,7 @@ func EnsureEnvironment() (InstallPaths, error) {
 		YtDlp:   ytdlpResult.Executable,
 		FFmpeg:  ffmpegResult.Executable,
 		FFprobe: ffprobeResult.Executable,
+		Bun:     bunResult.Executable,
 	}, nil
 }
 
@@ -212,15 +234,29 @@ func buildFFmpegArgs(m4aPath, mp3Path, thumbPath string, hasThumb bool, song dom
 		args = append(args, "-map", "0:a:0")
 	}
 
-	args = append(args,
-		"-c:a", "libmp3lame",
-		"-q:a", "2",
-		"-metadata", fmt.Sprintf("title=%s", song.Title),
-		"-metadata", fmt.Sprintf("artist=%s", song.Artist),
-		"-metadata", fmt.Sprintf("album=%s", song.Album),
-		"-metadata", fmt.Sprintf("comment=%s", sourceURL),
-		"-y", mp3Path,
-	)
+	metas := []string{
+		fmt.Sprintf("title=%s", song.Title),
+		fmt.Sprintf("artist=%s", song.Artist),
+		fmt.Sprintf("album=%s", song.Album),
+		fmt.Sprintf("comment=%s", sourceURL),
+	}
+	if song.AlbumArtist != "" {
+		metas = append(metas, fmt.Sprintf("album_artist=%s", song.AlbumArtist))
+	}
+	if song.TrackNum > 0 {
+		metas = append(metas, fmt.Sprintf("track=%d/%d", song.TrackNum, song.TrackNum))
+	}
+	if song.DiscNum > 0 {
+		metas = append(metas, fmt.Sprintf("disc=%d/%d", song.DiscNum, song.DiscNum))
+	}
+	if song.Year > 0 {
+		metas = append(metas, fmt.Sprintf("date=%d", song.Year))
+	}
+	args = append(args, "-c:a", "libmp3lame", "-q:a", "2")
+	for _, m := range metas {
+		args = append(args, "-metadata", m)
+	}
+	args = append(args, "-y", mp3Path)
 	return args
 }
 

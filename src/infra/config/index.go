@@ -13,12 +13,17 @@ type SpotifyConfig struct {
 	ClientSecret string `json:"clientSecret"`
 }
 
+type YoutubeConfig struct {
+	Cookies string `json:"cookies"`
+}
+
 type Config struct {
 	Spotify                SpotifyConfig `json:"spotify"`
 	OutputDir              string        `json:"outputDir"`
 	MaxConcurrentDownloads int           `json:"maxConcurrentDownloads"`
 	MaxDownloadThreads     int           `json:"maxDownloadThreads"`
 	Debug                  bool          `json:"debug"`
+	Youtube                YoutubeConfig `json:"youtube"`
 }
 
 const DefaultOutputDir = "downloads"

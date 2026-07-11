@@ -616,12 +616,17 @@ func (s *Service) fetchTracksAnon(ctx context.Context, playlistID string) ([]dom
 			albumName := getString(albumData, "name")
 
 			albumArt := ""
+			var albumYear int
 			if albumData != nil {
 				albumArt = extractGraphQLAlbumArt(getMap(albumData, "coverArt"))
+				if dateData := getMap(albumData, "date"); dateData != nil {
+					albumYear = int(getFloat(dateData, "year"))
+				}
 			}
 
 			trackDuration := int(getFloat(getMap(trackData, "trackDuration"), "totalMilliseconds") / 1000)
 			trackNumber := int(getFloat(trackData, "trackNumber"))
+			discNumber := int(getFloat(trackData, "discNumber"))
 
 			trackURI := getString(trackData, "uri")
 			trackID := getString(trackData, "id")
@@ -634,14 +639,17 @@ func (s *Service) fetchTracksAnon(ctx context.Context, playlistID string) ([]dom
 			}
 
 			song := domain.Song{
-				ID:         trackID,
-				Title:      trackName,
-				Artist:     artistStr,
-				Album:      albumName,
-				AlbumArt:   albumArt,
-				Duration:   trackDuration,
-				TrackNum:   trackNumber,
-				PlaylistID: playlistID,
+				ID:          trackID,
+				Title:       trackName,
+				Artist:      artistStr,
+				Album:       albumName,
+				AlbumArtist: artistStr,
+				AlbumArt:    albumArt,
+				Duration:    trackDuration,
+				TrackNum:    trackNumber,
+				DiscNum:     discNumber,
+				Year:        albumYear,
+				PlaylistID:  playlistID,
 			}
 			allSongs = append(allSongs, song)
 		}

@@ -50,7 +50,7 @@ func setupServer(cfg *config.Config, addr string) (*http.Server, *app.Handler, f
 	svc := spotifyservice.New()
 	svc.SetDB(database)
 
-	dl := ytdl.New(cfg.OutputDir, cfg.MaxDownloadThreads)
+	dl := ytdl.New(cfg.OutputDir, cfg.MaxDownloadThreads, cfg.Youtube)
 
 	handler := app.NewHandler(authServer, svc, dl, cfg)
 
