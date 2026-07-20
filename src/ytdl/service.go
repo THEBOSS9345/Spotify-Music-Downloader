@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
@@ -21,6 +22,67 @@ import (
 
 	"github.com/lrstanley/go-ytdlp"
 )
+
+var cdnHTTPClient = &http.Client{Timeout: 60 * time.Second}
+
+// doWithRetry retries transient/rate-limit failures against the YouTube CDN
+// with exponential backoff, honoring Retry-After when the CDN sends one.
+func doWithRetry(req *http.Request, maxAttempts int) (*http.Response, error) {
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			delay := retryBackoff(attempt)
+			select {
+			case <-req.Context().Done():
+				return nil, req.Context().Err()
+			case <-time.After(delay):
+			}
+		}
+
+		resp, err := cdnHTTPClient.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden || resp.StatusCode >= 500 {
+			lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
+			if retryAfter := parseRetryAfter(resp.Header.Get("Retry-After")); retryAfter > 0 {
+				resp.Body.Close()
+				select {
+				case <-req.Context().Done():
+					return nil, req.Context().Err()
+				case <-time.After(retryAfter):
+				}
+				continue
+			}
+			resp.Body.Close()
+			continue
+		}
+
+		return resp, nil
+	}
+	return nil, fmt.Errorf("request failed after %d attempts: %w", maxAttempts, lastErr)
+}
+
+func retryBackoff(attempt int) time.Duration {
+	base := time.Duration(1<<uint(attempt-1)) * time.Second
+	jitter := time.Duration(rand.Int63n(int64(500 * time.Millisecond)))
+	if base > 20*time.Second {
+		base = 20 * time.Second
+	}
+	return base + jitter
+}
+
+func parseRetryAfter(v string) time.Duration {
+	if v == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
+		return time.Duration(secs) * time.Second
+	}
+	return 0
+}
 
 type SearchResult struct {
 	Title     string `json:"title"`
@@ -59,7 +121,10 @@ func New(outputDir string, maxDownloadThreads int, ytCfg config.YoutubeConfig) *
 	dl := ytdlp.New().
 		NoPlaylist().
 		NoWarnings().
-		JsRuntimes("bun:" + installPaths.Bun)
+		JsRuntimes("bun:" + installPaths.Bun).
+		SleepRequests(1).
+		Retries("10").
+		ExtractorRetries("5")
 
 	if ytCfg.Cookies != "" {
 		if _, err := os.Stat(ytCfg.Cookies); err == nil {
@@ -282,7 +347,7 @@ func (s *Service) downloadChunk(ctx context.Context, url string, f *os.File, sta
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
 	setFirefoxHeaders(req)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := doWithRetry(req, 5)
 	if err != nil {
 		return fmt.Errorf("chunk request: %w", err)
 	}
@@ -340,7 +405,7 @@ func (s *Service) downloadWithYtDlp(ctx context.Context, result SearchResult, fi
 	}
 	setFirefoxHeaders(headReq)
 
-	headResp, err := http.DefaultClient.Do(headReq)
+	headResp, err := doWithRetry(headReq, 5)
 	if err != nil {
 		return fmt.Errorf("head request: %w", err)
 	}
@@ -445,7 +510,7 @@ func (s *Service) downloadRange(ctx context.Context, url string, f *os.File, fil
 	}
 	setFirefoxHeaders(req)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := doWithRetry(req, 5)
 	if err != nil {
 		return fmt.Errorf("range request: %w", err)
 	}

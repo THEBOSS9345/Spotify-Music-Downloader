@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -18,6 +19,65 @@ import (
 
 	"github.com/zmb3/spotify/v2"
 )
+
+// doAPIRequest retries Spotify Web API calls on 429, honoring the
+// Retry-After header the API sends when the rate limit is hit.
+func doAPIRequest(client *http.Client, req *http.Request, maxAttempts int) (*http.Response, error) {
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			delay := apiRetryBackoff(attempt)
+			select {
+			case <-req.Context().Done():
+				return nil, req.Context().Err()
+			case <-time.After(delay):
+			}
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		if resp.StatusCode == http.StatusTooManyRequests {
+			lastErr = fmt.Errorf("HTTP 429")
+			retryAfter := apiParseRetryAfter(resp.Header.Get("Retry-After"))
+			resp.Body.Close()
+			if retryAfter == 0 {
+				retryAfter = apiRetryBackoff(attempt + 1)
+			}
+			select {
+			case <-req.Context().Done():
+				return nil, req.Context().Err()
+			case <-time.After(retryAfter):
+			}
+			continue
+		}
+
+		return resp, nil
+	}
+	return nil, fmt.Errorf("request failed after %d attempts: %w", maxAttempts, lastErr)
+}
+
+func apiRetryBackoff(attempt int) time.Duration {
+	base := time.Duration(1<<uint(attempt-1)) * time.Second
+	jitter := time.Duration(rand.Int63n(int64(300 * time.Millisecond)))
+	if base > 15*time.Second {
+		base = 15 * time.Second
+	}
+	return base + jitter
+}
+
+func apiParseRetryAfter(v string) time.Duration {
+	if v == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
+		return time.Duration(secs) * time.Second
+	}
+	return 0
+}
 
 type Service struct {
 	client     *spotify.Client
